@@ -77,6 +77,10 @@ maybe_update_ctx(_Node, Ctx) ->
 pp({error, _}, _Ctx) -> empty();
 % TODO: handle specs
 pp({attribute, _, spec, _}, _Ctx) -> empty();
+% TODO: handle type
+pp({attribute, _, type, _}, _Ctx) -> empty();
+% TODO: handle record
+pp({attribute, _, record, _}, _Ctx) -> empty();
 % TODO: handle opaque
 pp({attribute, _, opaque, _}, _Ctx) -> empty();
 % TODO: handle dialyzer
@@ -134,6 +138,12 @@ pp({string, _, V}, _Ctx) ->
 pp({bin, _, [{bin_element, _, {string, _, V}, default, default}]}, _Ctx) ->
     text(io_lib:write_string(V));
 pp({char, _, V}, _Ctx) -> text("?" ++ [V]);
+
+%% TODO: record
+pp({record, _, _, _}, _Ctx) -> text(":todo_record_here");
+pp({record, _, _, _, _}, _Ctx) -> text(":todo_record_here");
+pp({record_field, _, _, _, _}, _Ctx) -> text(":todo_record_here");
+pp({record_index, _, _, _}, _Ctx) -> text(":todo_record_here");
 
 pp({bin, _, Elems}, Ctx) -> besidel([text("<<"), pp_bin_es(Elems, Ctx), text(">>")]);
 
@@ -196,7 +206,7 @@ pp({op, _, Op, Left, Right}, Ctx) ->
 % unary
 pp({op, _, Op, Right}, Ctx) ->
     {Prec, RightPrec} = preop_prec(Op),
-    LOp = text(atom_to_list(fn_to_erl:map_op_reverse(Op))),
+    LOp = text(atom_to_list(map_op_reverse(Op))),
     LRight = pp(Right, Ctx#ctxt{prec=RightPrec}),
     L = parc(Ctx, [LOp, LRight]),
     maybe_paren(Prec, Ctx#ctxt.prec, L);
@@ -240,6 +250,16 @@ pp({'receive', _, Clauses, AfterExpr, AfterBody}, Ctx0) ->
             nestc(Ctx, pp_body(AfterBody, Ctx)),
             text("end")]);
 
+pp({'catch', _, Expr}, Ctx0) ->
+    Ctx = reset_prec(Ctx0),
+    above(text("try do"),
+          abovel([
+                nestc(Ctx, pp(Expr, Ctx)),
+                text("catch"),
+                text("  :error, e -> {:\"EXIT\", {e, __STACKTRACE__}}"),
+                text("  :exit, e -> {:\"EXIT\", e}"),
+                text("  e -> e"),
+                text("end")]));
 pp({'try', _, Body, [], Clauses, AfterBody}, Ctx0) ->
     Ctx = reset_prec(Ctx0),
     above(text("try do"),
