@@ -33,14 +33,15 @@
 -define(NOHOOK, none).
 
 -record(ctxt, {prec = 0       :: integer(),
-	       sub_indent = 2     :: non_neg_integer(),
+           sub_indent = 2     :: non_neg_integer(),
            exports_all = false,
            exports = #{},
            records = #{},
            matching = false,
-	       break_indent = 4   :: non_neg_integer(),
-	       paper = ?PAPER     :: integer(),
-	       ribbon = ?RIBBON   :: integer()}).
+           vars=#{},
+           break_indent = 4   :: non_neg_integer(),
+           paper = ?PAPER     :: integer(),
+           ribbon = ?RIBBON   :: integer()}).
 
 layout(V) -> layout(V, default_ctx()).
 
@@ -131,8 +132,13 @@ pp({attribute, _, export, _}, _Ctx) -> empty();
 pp({attribute, _, compile, export_all}, _Ctx) -> text("@compile :export_all");
 pp({attribute, _, compile, _}, _Ctx) -> empty();
 
-pp({var, _, V}, _Ctx) -> 
-	text(transform_var_name(V));
+pp({var, _, V}, #ctxt{matching=true, vars=Vars}) ->
+    case maps:is_key(V, Vars) of
+        true -> text("^" ++ transform_var_name(V));
+        false -> text(transform_var_name(V))
+    end;
+pp({var, _, V}, _Ctx) ->
+    text(transform_var_name(V));
 pp({atom, _, true}, _Ctx) -> text("true");
 pp({atom, _, false}, _Ctx) -> text("false");
 pp({atom, _, nil}, _Ctx) -> text("nil");
@@ -284,12 +290,12 @@ pp({'try', _, Body, [], Clauses, AfterBody}, Ctx0) ->
 
 pp({'try', _, Expr, OfCases, Clauses, AfterBody}, Ctx0) ->
     Ctx = reset_prec(Ctx0),
-	abovel([abovel([text("try do"), nestc(Ctx, pp_body(Expr, Ctx))]),
-			maybe_above(
-			  maybe_above(pp_try_catch_clauses(Clauses, Ctx),
-						  above(text("else"), nestc(Ctx, pp_case_clauses(OfCases, Ctx)))),
-			  pp_try_after(AfterBody, Ctx)),
-			text("end")]);
+    abovel([abovel([text("try do"), nestc(Ctx, pp_body(Expr, Ctx))]),
+            maybe_above(
+              maybe_above(pp_try_catch_clauses(Clauses, Ctx),
+                          above(text("else"), nestc(Ctx, pp_case_clauses(OfCases, Ctx)))),
+              pp_try_after(AfterBody, Ctx)),
+            text("end")]);
 
 pp({eof, _}, _Ctx) -> empty().
 
@@ -310,13 +316,13 @@ pp_function_clause({clause, _, Patterns, [], Body}, Name, DefKw, Ctx) ->
                        beside(text(DefKw ++ " " ++ a2l(Name) ++ "("), beside(pp_args_inn(Patterns, Ctx), text(") do"))),
                        Body);
 pp_function_clause({clause, _, Patterns, Guards, Body}, Name, DefKw, Ctx) ->
-	pp_header_and_body(Ctx,
-					   followc(Ctx,
-							   besidel([text(DefKw ++ " " ++ a2l(Name) ++ "("),
-										pp_args_inn(Patterns, Ctx),
-										text(")")]),
-							   beside(text("when "), beside(pp_guards(Guards, Ctx), text(" do")))),
-					   Body).
+    pp_header_and_body(Ctx,
+                       followc(Ctx,
+                               besidel([text(DefKw ++ " " ++ a2l(Name) ++ "("),
+                                        pp_args_inn(Patterns, Ctx),
+                                        text(")")]),
+                               beside(text("when "), beside(pp_guards(Guards, Ctx), text(" do")))),
+                       Body).
 
 pp_args_inn(Args, Ctx) -> pp_args_inn(Args, Ctx, fun pp/2).
 
@@ -671,7 +677,7 @@ pp_bin_e_type(Type=native, Ctx) ->
 
 
 call_op(OpenText, Left, Right, Ctx) ->
-	besidel([text(OpenText), pp(Left, Ctx), text(", "), pp(Right, Ctx), text(")")]).
+    besidel([text(OpenText), pp(Left, Ctx), text(", "), pp(Right, Ctx), text(")")]).
 
 add_record_declaration(RecName, Fields, Ctx=#ctxt{records=Records}) ->
     FieldInfo = [parse_record_field(Field, Pos) ||
