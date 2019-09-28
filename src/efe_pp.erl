@@ -111,9 +111,9 @@ pp({attribute, _, Attr=date, V}, _Ctx) ->
 pp({attribute, _, Attr=vc, V}, _Ctx) ->
     gen_attr(Attr, V);
 pp({attribute, _, import, {ModNameAtom, Imports}}, Ctx) ->
-    beside(text("@import"),
-           followc(Ctx, beside(text(a2l(ModNameAtom)), comma_f()),
-                   wrap_list(join(Imports, Ctx, fun pp_fn_ref/2, comma_f()))));
+    beside(text("import "),
+           followc(Ctx, besidel([text(":" ++ a2l(ModNameAtom)), comma_f(), text(" only:")]),
+                   wrap_list(join(Imports, Ctx, fun pp_fn_import_ref/2, comma_f()))));
 pp({attribute, _, export_type, Exports}, Ctx) ->
     pp_attr_fun_list("@export_type ", Exports, Ctx);
 pp({attribute, _, on_load, V={_FName, _Arity}}, Ctx) ->
@@ -423,6 +423,9 @@ wrap(Items, Open, Close) ->
 
 pp_fn_ref({FNameAtom, Arity}, _Ctx) ->
     text("&" ++ a2l(FNameAtom) ++ "/" ++ arity_to_list(Arity)).
+
+pp_fn_import_ref({FNameAtom, Arity}, _Ctx) ->
+    text("" ++ a2l(FNameAtom) ++ ": " ++ arity_to_list(Arity)).
 
 pp_fn_deprecated_ref({FName, Arity, When}, _Ctx) ->
     text("(" ++ a2l(FName) ++ ", " ++ arity_to_list(Arity) ++ ", "
