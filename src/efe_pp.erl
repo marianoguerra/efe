@@ -19,7 +19,6 @@
 -import(erl_parse, [inop_prec/1, preop_prec/1]).
 
 % TODO: binary comprehensions
-% TODO: records
 % TODO: non short circuit bool ops (and, or)
 % TODO: all vars on match position should have ^
 
@@ -37,6 +36,8 @@
 	       sub_indent = 2     :: non_neg_integer(),
            exports_all = false,
            exports = #{},
+           records = #{},
+           matching = false,
 	       break_indent = 4   :: non_neg_integer(),
 	       paper = ?PAPER     :: integer(),
 	       ribbon = ?RIBBON   :: integer()}).
@@ -56,6 +57,9 @@ set_prec(Ctxt, Prec) ->
 reset_prec(Ctxt) ->
     set_prec(Ctxt, 0).    % used internally
 
+enter_match(Ctx) ->
+    Ctx#ctxt{matching=true}.
+
 pp_mod([], _Ctx) -> empty();
 pp_mod([{attribute, _, module, ModName} | Nodes], Ctx) ->
     above(text("defmodule :" ++ a2l(ModName) ++ " do"),
@@ -71,6 +75,10 @@ maybe_update_ctx({attribute, _, export, Exports}, Ctx=#ctxt{exports=CurExports})
     NewExports = maps:merge(CurExports, maps:from_list([{K, true} || K <- Exports])),
     Ctx1 = Ctx#ctxt{exports=NewExports},
     Ctx1;
+
+maybe_update_ctx({attribute, _, record, {RecName, Fields}}, Ctx) ->
+    add_record_declaration(RecName, Fields, Ctx);
+
 maybe_update_ctx(_Node, Ctx) ->
     Ctx.
 
@@ -79,10 +87,10 @@ pp({error, _}, _Ctx) -> empty();
 pp({attribute, _, spec, _}, _Ctx) -> empty();
 % TODO: handle type
 pp({attribute, _, type, _}, _Ctx) -> empty();
-% TODO: handle record
-pp({attribute, _, record, _}, _Ctx) -> empty();
 % TODO: handle opaque
 pp({attribute, _, opaque, _}, _Ctx) -> empty();
+% ignore here since we handled it above
+pp({attribute, _, record, _}, _Ctx) -> empty();
 % TODO: handle dialyzer
 pp({attribute, _, dialyzer, _}, _Ctx) -> empty();
 % TODO: handle callback
@@ -140,10 +148,14 @@ pp({bin, _, [{bin_element, _, {string, _, V}, default, default}]}, _Ctx) ->
 pp({char, _, V}, _Ctx) -> text("?" ++ [V]);
 
 %% TODO: record
-pp({record, _, _, _}, _Ctx) -> text(":todo_record_here");
-pp({record, _, _, _, _}, _Ctx) -> text(":todo_record_here");
-pp({record_field, _, _, _, _}, _Ctx) -> text(":todo_record_here");
-pp({record_index, _, _, _}, _Ctx) -> text(":todo_record_here");
+pp({record, _, RecName, Fields}, Ctx) ->
+    pp_rec_new(RecName, Fields, Ctx);
+pp({record, _, CurRecExpr, RecName, Fields}, Ctx) ->
+    pp_rec_update(RecName, Fields, CurRecExpr, Ctx);
+pp({record_field, _, RecExpr, RecName, Field}, Ctx) ->
+    pp_rec_field(RecExpr, RecName, Field, Ctx);
+pp({record_index, _, RecName, Field}, Ctx) ->
+    pp_rec_index(RecName, Field, Ctx);
 
 pp({bin, _, Elems}, Ctx) -> besidel([text("<<"), pp_bin_es(Elems, Ctx), text(">>")]);
 
@@ -184,9 +196,8 @@ pp({function, _, Name, Arity, Clauses}, Ctx) ->
     % HACK: force a new line above each top level function
     pp_function_clauses(Clauses, Name, DefKw, Ctx);
 
-pp({match, Line, Left, Right}, Ctx) ->
-    % reuse logic
-    pp({op, Line, '=', Left, Right}, Ctx);
+pp({match, _, Left, Right}, Ctx) ->
+    parc(Ctx, [pp(Left, enter_match(Ctx)), text("="), pp(Right, Ctx)]);
 
 pp({op, _, 'div', Left, Right}, Ctx) ->
     call_op("div(", Left, Right, Ctx);
@@ -359,6 +370,8 @@ endk() -> text("end\n").
 dok() -> text("do").
 pipe() -> text("|").
 
+pipe_op() -> text(" |> ").
+
 % not sure if the best way
 pp_body([], _Ctx) ->
     empty();
@@ -474,8 +487,12 @@ cons_to_list({cons, _, H, T}, Accum) ->
 
 wrap_tuple(Items) ->
     wrap(Items, otuple_f(), ctuple_f()).
+
 wrap_map(Items) ->
     wrap(Items, omap_f(), cmap_f()).
+
+wrap_parens(Items) ->
+    wrap(Items, oparen_f(), cparen_f()).
 
 pp_map(Items, Ctx) ->
     wrap_map(pp_map_inner(Items, Ctx)).
@@ -652,6 +669,81 @@ pp_bin_e_type(Type=native, Ctx) ->
 
 call_op(OpenText, Left, Right, Ctx) ->
 	besidel([text(OpenText), pp(Left, Ctx), text(", "), pp(Right, Ctx), text(")")]).
+
+add_record_declaration(RecName, Fields, Ctx=#ctxt{records=Records}) ->
+    FieldInfo = [parse_record_field(Field, Pos) ||
+                 {Pos, Field} <- enumerate(Fields)],
+    RecInfo = #{fields => maps:from_list(FieldInfo), field_order => FieldInfo},
+    NewRecords = Records # {RecName => RecInfo},
+    Ctx#ctxt{records=NewRecords}.
+
+enumerate(Items) ->
+    enumerate(Items, [], 0).
+
+enumerate([], Accum, _) ->
+    lists:reverse(Accum);
+enumerate([H | T], Accum, N) ->
+    enumerate(T, [{N, H} | Accum], N + 1).
+
+parse_record_field({typed_record_field, Field, _Type}, Pos) ->
+    parse_record_field(Field, Pos);
+parse_record_field({record_field, _, {atom, _, Name}}, Pos) ->
+    {Name, #{default => {atom, 0, undefined}, position => Pos + 1}};
+parse_record_field({record_field, _, {atom, _, Name}, Default}, Pos) ->
+    {Name, #{default => Default, position => Pos + 1}}.
+
+rec_merge_field_defaults(NewFieldMap, FieldOrder, true) ->
+    [maps:get(FieldName, NewFieldMap, {var, 0, '_'})
+     || {FieldName, _} <- FieldOrder];
+rec_merge_field_defaults(NewFieldMap, FieldOrder, false) ->
+    [maps:get(FieldName, NewFieldMap, Default)
+     || {FieldName, #{default := Default}} <- FieldOrder].
+
+pp_rec_new(RecName, Fields, Ctx=#ctxt{records=Records, matching=Matching}) ->
+    % TODO: handle case of record not defined
+    #{field_order := FieldOrder} = maps:get(RecName, Records, #{field_order => []}),
+    NewFieldList = [{FieldName, Value} ||
+                    {record_field, _, {atom, _, FieldName}, Value} <- Fields],
+    NewFieldMap = maps:from_list(NewFieldList),
+    FieldValues = rec_merge_field_defaults(NewFieldMap, FieldOrder, Matching),
+    pp({tuple, 0, [{atom, 0, RecName} | FieldValues]}, Ctx).
+
+pp_rec_update(_RecName, [], CurRecExpr, Ctx) ->
+    % record update with no field O.o
+    pp(CurRecExpr, Ctx);
+pp_rec_update(RecName, Fields, CurRecExpr, Ctx=#ctxt{records=Records}) ->
+    % TODO: handle case of record not defined
+    #{fields := FieldsMap} = maps:get(RecName, Records, #{fields => #{}}),
+    wrap_parens(besidel([pp(CurRecExpr, Ctx), pipe_op(),
+             join(Fields, {Ctx, FieldsMap}, fun pp_rec_update_field/2, pipe_op())])).
+
+pp_rec_field(RecExpr, RecName, {atom, _, Field}, Ctx=#ctxt{records=Records}) ->
+    % TODO: handle case of record not defined
+    #{fields := FieldsMap} = maps:get(RecName, Records, #{fields => #{}}),
+    % TODO: handle case when record field not defined
+    #{position := Pos} = maps:get(Field, FieldsMap, 1),
+    % First item is record name
+    TuplePos = Pos + 1,
+    besidel([text("elem("), pp(RecExpr, Ctx),
+             text(", " ++ integer_to_list(TuplePos) ++ ")")]).
+
+pp_rec_index(RecName, {atom, _, Field}, #ctxt{records=Records}) ->
+    % TODO: handle case of record not defined
+    #{fields := FieldsMap} = maps:get(RecName, Records, #{fields => #{}}),
+    % TODO: handle case when record field not defined
+    #{position := Pos} = maps:get(Field, FieldsMap, 1),
+    % First item is record name
+    TuplePos = Pos + 1,
+    text(integer_to_list(TuplePos)).
+
+pp_rec_update_field({record_field, _, {atom, _, FieldName}, Value}, {Ctx, Fields}) ->
+    % TODO: handle case when record field not defined
+    #{position := Pos} = maps:get(FieldName, Fields, #{position => 1}),
+    % First item is record name
+    TuplePos = Pos + 1,
+    besidel([text("put_elem(" ++ integer_to_list(TuplePos) ++ ", "),
+             pp(Value, Ctx), text(")")]).
+
 
 % TODO: if bit ops are used Bitwise must be included: https://hexdocs.pm/elixir/Bitwise.html
 map_op_reverse('rem') -> 'rem';
