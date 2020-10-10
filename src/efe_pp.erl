@@ -132,11 +132,10 @@ pp({attribute, _, export, _}, _Ctx) -> empty();
 pp({attribute, _, compile, export_all}, _Ctx) -> text("@compile :export_all");
 pp({attribute, _, compile, _}, _Ctx) -> empty();
 
-pp({var, _, V}, #ctxt{matching=true, vars=Vars}) ->
-    case maps:is_key(V, Vars) of
-        true -> text("^" ++ transform_var_name(V));
-        false -> text(transform_var_name(V))
-    end;
+pp({var, _, V, #{new := false, matching := true}}, #ctxt{}) ->
+    text("^" ++ transform_var_name(V));
+pp({var, _, V, _}, _Ctx) ->
+    text(transform_var_name(V));
 pp({var, _, V}, _Ctx) ->
     text(transform_var_name(V));
 pp({atom, _, true}, _Ctx) -> text("true");
@@ -327,8 +326,8 @@ pp_function_clause({clause, _, Patterns, Guards, Body}, Name, DefKw, Ctx) ->
 pp_args_inn(Args, Ctx) -> pp_args_inn(Args, Ctx, fun pp/2).
 
 pp_args_inn([], _Ctx, _PPFun)   -> empty();
-pp_args_inn([Arg], Ctx, PPFun) -> PPFun(Arg, Ctx);
-pp_args_inn(Args, Ctx, PPFun)  -> join(Args, Ctx, PPFun, comma_f()).
+pp_args_inn([Arg], Ctx, PPFun) -> PPFun(Arg, enter_match(Ctx));
+pp_args_inn(Args, Ctx, PPFun)  -> join(Args, enter_match(Ctx), PPFun, comma_f()).
 
 pp_header_and_body_no_end(Ctx, HeaderLayout, Body) ->
     sep([HeaderLayout, nestc(Ctx, pp_body(Body, Ctx))]).
@@ -461,6 +460,7 @@ pp_call_f(MName, FName, Args, Ctx, PPFun) ->
     beside(wrap(dot_f(), pp_call_pos(MName, ":", Ctx),  pp_call_pos(FName, "", Ctx)), pp_args(Args, Ctx, PPFun)).
 
 pp_call_pos(V={var, _, _}, _, Ctx) -> pp(V, Ctx);
+pp_call_pos(V={var, _, _, _}, _, Ctx) -> pp(V, Ctx);
 pp_call_pos({atom, _, V}, Prefix, _Ctx) -> text(Prefix ++ a2l(V));
 pp_call_pos(V, _, Ctx) -> beside(oparen_f(), beside(pp(V, Ctx), cparen_f())).
 
@@ -584,7 +584,11 @@ pp_try_catch_case({clause, _, [{tuple, _, TItems}], Guards, Body}, Ctx) ->
 
 pp_try_catch_case_items([{atom, _, throw}, Var, {var, _, '_'}], Ctx) ->
     pp(Var, Ctx);
+pp_try_catch_case_items([{atom, _, throw}, Var, {var, _, '_', _}], Ctx) ->
+    pp(Var, Ctx);
 pp_try_catch_case_items([Type, Var, {var, _, '_'}], Ctx) ->
+    pp_items([Type, Var], Ctx);
+pp_try_catch_case_items([Type, Var, {var, _, '_', _}], Ctx) ->
     pp_items([Type, Var], Ctx);
 pp_try_catch_case_items([Type, Var, StackTrace], Ctx) ->
     pp_items([Type, Var, StackTrace], Ctx).
@@ -993,6 +997,7 @@ is_ex_autoimport(_, _) -> false.
 should_prefix_erlang_call({atom, _, FName}, Arity) ->
     should_prefix_erlang_call(FName, Arity);
 should_prefix_erlang_call({_, _, _}, _Arity) -> false;
+should_prefix_erlang_call({var, _, _, _}, _Arity) -> false;
 should_prefix_erlang_call(FName, Arity) when is_atom(FName), is_number(Arity) ->
     is_autoimported(FName, Arity) andalso not is_ex_autoimport(FName, Arity).
 
