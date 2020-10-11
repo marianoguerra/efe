@@ -76,12 +76,15 @@ pp_mod([], _Ctx) ->
 pp_mod([{attribute, _, module, ModName} | Nodes], Ctx) ->
     above(text("defmodule :" ++ a2l(ModName) ++ " do"),
           above(nestc(Ctx, pp_mod(Nodes, Ctx)), text("end")));
-pp_mod([Node={attribute, _, record, {RecName, Fields}} | Nodes], Ctx) ->
+pp_mod([Node = {attribute, _, record, {RecName, Fields}} | Nodes], Ctx) ->
     Ctx1 = add_record_declaration(RecName, Fields, Ctx),
-    {Ctx2, Cont} = case Ctx1#ctxt.record_imported of
-                       true -> {Ctx1, empty()};
-                       false -> {Ctx1#ctxt{record_imported = true}, text("use Record")}
-                   end,
+    {Ctx2, Cont} =
+        case Ctx1#ctxt.record_imported of
+            true ->
+                {Ctx1, empty()};
+            false ->
+                {Ctx1#ctxt{record_imported = true}, text("use Record")}
+        end,
     abovel([Cont, pp(Node, Ctx2), pp_mod(Nodes, Ctx2)]);
 pp_mod([Node | Nodes], Ctx) ->
     Ctx1 = maybe_update_ctx(Node, Ctx),
@@ -111,12 +114,10 @@ pp({attribute, _, type, _}, _Ctx) ->
 pp({attribute, _, opaque, _}, _Ctx) ->
     empty();
 pp({attribute, _, record, {RecName, Fields}}, Ctx) ->
-    besidel([text("Record.defrecord(:"), text(atom_to_list(RecName)),
+    besidel([text("Record.defrecord(:"),
+             text(atom_to_list(RecName)),
              text(", "),
-                         join(Fields,
-                              Ctx,
-                              fun pp_record_field_decl/2,
-                              comma_f()),
+             join(Fields, Ctx, fun pp_record_field_decl/2, comma_f()),
              text(")")]);
 % TODO: handle dialyzer
 pp({attribute, _, dialyzer, _}, _Ctx) ->
@@ -800,7 +801,11 @@ enumerate([H | T], Accum, N) ->
 pp_record_field_decl({typed_record_field, Field, _Type}, Ctx) ->
     pp_record_field_decl(Field, Ctx);
 pp_record_field_decl({record_field, L1, {atom, L2, Name}}, Ctx) ->
-    pp_record_field_decl({record_field, L1, {atom, L2, Name}, {atom, L2, undefined}}, Ctx);
+    pp_record_field_decl({record_field,
+                          L1,
+                          {atom, L2, Name},
+                          {atom, L2, undefined}},
+                         Ctx);
 pp_record_field_decl({record_field, _, {atom, _, Name}, Default}, Ctx) ->
     besidel([text(atom_to_list(Name)), text(": "), pp(Default, Ctx)]).
 
