@@ -1,7 +1,8 @@
 -module(scopes).
 
 -export([noop/0, simple_scope/0, other_scope/1, multi_clause/1, case_match/0,
-         receive_match/0, try_match/0, fun_scope/0, lc_scope/0, case_expr_not_matching/0]).
+         receive_match/0, try_match/0, fun_scope/0, named_fun_scope/0,
+         lc_scope/0, case_expr_not_matching/0]).
 
 noop() ->
     ok.
@@ -68,6 +69,19 @@ fun_scope() ->
     A = 1,
     F =
         fun (B) ->
+                B = 1, % match (from arg)
+                A = 1, % match (from outer scope)
+                C = B + A,
+                C
+        end,
+    F(2),
+    C = 3, % shouldn't match (vars in fun are in nested scope)
+    B = 1, % shouldn't match (vars in fun are in nested scope)
+    A + B + C.
+
+named_fun_scope() ->
+    A = 1,
+        F = fun F1 (B) ->
                 B = 1, % match (from arg)
                 A = 1, % match (from outer scope)
                 C = B + A,
