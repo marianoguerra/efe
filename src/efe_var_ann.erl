@@ -22,6 +22,8 @@ clear_matching(S) ->
 enter_scope(S = #{scope := Scope = #{vars := Vars}, scopes := Scopes}) ->
     S#{scope := new_scope(Vars), scopes := [Scope | Scopes]}.
 
+add_var_if_not_there(S, _Line, '_') ->
+    S;
 add_var_if_not_there(S = #{scope := Scope = #{vars := Vars}}, Line, Name) ->
     case maps:get(Name, Vars, nil) of
         nil ->
