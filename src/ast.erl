@@ -391,14 +391,14 @@ pattern_grp_item({bin_element, L1, E1, S1, T1}, St, Fn) ->
     {S2, St1} =
         case S1 of
             default ->
-                default;
+                {default, St};
             _ ->
                 expr(S1, St, Fn)
         end,
     {T2, St2} =
         case T1 of
             default ->
-                default;
+                {default, St1};
             _ ->
                 bit_types(T1, St1, Fn)
         end,

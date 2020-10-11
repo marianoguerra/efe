@@ -81,7 +81,8 @@ fun_scope() ->
 
 named_fun_scope() ->
     A = 1,
-        F = fun F1 (B) ->
+    F =
+        fun F1(B) ->
                 B = 1, % match (from arg)
                 A = 1, % match (from outer scope)
                 C = B + A,
@@ -109,6 +110,8 @@ lc_scope() ->
 
 case_expr_not_matching() ->
     A = 1,
-    case A of % shouldn't match, it's not a pattern
-        1 -> ok
+    case A % shouldn't match, it's not a pattern
+        of
+        1 ->
+            ok
     end.

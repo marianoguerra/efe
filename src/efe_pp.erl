@@ -30,7 +30,6 @@
 
 % TODO: binary comprehensions
 % TODO: non short circuit bool ops (and, or)
-% TODO: all vars on match position should have ^
 
 % used on tests
 -export([pp_guards/2, default_ctx/0]).
@@ -47,8 +46,7 @@
          exports_all = false,
          exports = #{},
          records = #{},
-         matching = false,
-         vars = #{},
+         record_imported = false,
          break_indent = 4 :: non_neg_integer(),
          paper = ?PAPER :: integer(),
          ribbon = ?RIBBON :: integer()}).
@@ -73,14 +71,18 @@ set_prec(Ctxt, Prec) ->
 reset_prec(Ctxt) ->
     set_prec(Ctxt, 0).    % used internally
 
-enter_match(Ctx) ->
-    Ctx#ctxt{matching = true}.
-
 pp_mod([], _Ctx) ->
     empty();
 pp_mod([{attribute, _, module, ModName} | Nodes], Ctx) ->
     above(text("defmodule :" ++ a2l(ModName) ++ " do"),
           above(nestc(Ctx, pp_mod(Nodes, Ctx)), text("end")));
+pp_mod([Node={attribute, _, record, {RecName, Fields}} | Nodes], Ctx) ->
+    Ctx1 = add_record_declaration(RecName, Fields, Ctx),
+    {Ctx2, Cont} = case Ctx1#ctxt.record_imported of
+                       true -> {Ctx1, empty()};
+                       false -> {Ctx1#ctxt{record_imported = true}, text("use Record")}
+                   end,
+    abovel([Cont, pp(Node, Ctx2), pp_mod(Nodes, Ctx2)]);
 pp_mod([Node | Nodes], Ctx) ->
     Ctx1 = maybe_update_ctx(Node, Ctx),
     above(pp(Node, Ctx1), pp_mod(Nodes, Ctx1)).
@@ -94,8 +96,6 @@ maybe_update_ctx({attribute, _, export, Exports},
         maps:merge(CurExports, maps:from_list([{K, true} || K <- Exports])),
     Ctx1 = Ctx#ctxt{exports = NewExports},
     Ctx1;
-maybe_update_ctx({attribute, _, record, {RecName, Fields}}, Ctx) ->
-    add_record_declaration(RecName, Fields, Ctx);
 maybe_update_ctx(_Node, Ctx) ->
     Ctx.
 
@@ -110,9 +110,14 @@ pp({attribute, _, type, _}, _Ctx) ->
 % TODO: handle opaque
 pp({attribute, _, opaque, _}, _Ctx) ->
     empty();
-% ignore here since we handled it above
-pp({attribute, _, record, _}, _Ctx) ->
-    empty();
+pp({attribute, _, record, {RecName, Fields}}, Ctx) ->
+    besidel([text("Record.defrecord(:"), text(atom_to_list(RecName)),
+             text(", "),
+                         join(Fields,
+                              Ctx,
+                              fun pp_record_field_decl/2,
+                              comma_f()),
+             text(")")]);
 % TODO: handle dialyzer
 pp({attribute, _, dialyzer, _}, _Ctx) ->
     empty();
@@ -247,7 +252,7 @@ pp({function, _, Name, Arity, Clauses}, Ctx) ->
     % HACK: force a new line above each top level function
     pp_function_clauses(Clauses, Name, DefKw, Ctx);
 pp({match, _, Left, Right}, Ctx) ->
-    parc(Ctx, [pp(Left, enter_match(Ctx)), text("="), pp(Right, Ctx)]);
+    parc(Ctx, [pp(Left, Ctx), text("="), pp(Right, Ctx)]);
 pp({op, _, 'div', Left, Right}, Ctx) ->
     call_op("div(", Left, Right, Ctx);
 pp({op, _, 'rem', Left, Right}, Ctx) ->
@@ -364,9 +369,9 @@ pp_args_inn(Args, Ctx) ->
 pp_args_inn([], _Ctx, _PPFun) ->
     empty();
 pp_args_inn([Arg], Ctx, PPFun) ->
-    PPFun(Arg, enter_match(Ctx));
+    PPFun(Arg, Ctx);
 pp_args_inn(Args, Ctx, PPFun) ->
-    join(Args, enter_match(Ctx), PPFun, comma_f()).
+    join(Args, Ctx, PPFun, comma_f()).
 
 pp_header_and_body_no_end(Ctx, HeaderLayout, Body) ->
     sep([HeaderLayout, nestc(Ctx, pp_body(Body, Ctx))]).
@@ -444,9 +449,6 @@ dok() ->
 
 pipe() ->
     text("|").
-
-pipe_op() ->
-    text(" |> ").
 
 % not sure if the best way
 pp_body([], _Ctx) ->
@@ -795,6 +797,13 @@ enumerate([], Accum, _) ->
 enumerate([H | T], Accum, N) ->
     enumerate(T, [{N, H} | Accum], N + 1).
 
+pp_record_field_decl({typed_record_field, Field, _Type}, Ctx) ->
+    pp_record_field_decl(Field, Ctx);
+pp_record_field_decl({record_field, L1, {atom, L2, Name}}, Ctx) ->
+    pp_record_field_decl({record_field, L1, {atom, L2, Name}, {atom, L2, undefined}}, Ctx);
+pp_record_field_decl({record_field, _, {atom, _, Name}, Default}, Ctx) ->
+    besidel([text(atom_to_list(Name)), text(": "), pp(Default, Ctx)]).
+
 parse_record_field({typed_record_field, Field, _Type}, Pos) ->
     parse_record_field(Field, Pos);
 parse_record_field({record_field, _, {atom, _, Name}}, Pos) ->
@@ -802,71 +811,48 @@ parse_record_field({record_field, _, {atom, _, Name}}, Pos) ->
 parse_record_field({record_field, _, {atom, _, Name}, Default}, Pos) ->
     {Name, #{default => Default, position => Pos + 1}}.
 
-rec_merge_field_defaults(NewFieldMap, FieldOrder, true) ->
-    [maps:get(FieldName, NewFieldMap, {var, 0, '_'})
-     || {FieldName, _} <- FieldOrder];
-rec_merge_field_defaults(NewFieldMap, FieldOrder, false) ->
-    [maps:get(FieldName, NewFieldMap, Default)
-     || {FieldName, #{default := Default}} <- FieldOrder].
-
-pp_rec_new(RecName,
-           Fields,
-           Ctx = #ctxt{records = Records, matching = Matching}) ->
-    % TODO: handle case of record not defined
-    #{field_order := FieldOrder} =
-        maps:get(RecName, Records, #{field_order => []}),
-    NewFieldList =
-        [{FieldName, Value}
-         || {record_field, _, {atom, _, FieldName}, Value} <- Fields],
-    NewFieldMap = maps:from_list(NewFieldList),
-    FieldValues = rec_merge_field_defaults(NewFieldMap, FieldOrder, Matching),
-    pp({tuple, 0, [{atom, 0, RecName} | FieldValues]}, Ctx).
-
-pp_rec_update(_RecName, [], CurRecExpr, Ctx) ->
-    % record update with no field O.o
-    pp(CurRecExpr, Ctx);
-pp_rec_update(RecName, Fields, CurRecExpr, Ctx = #ctxt{records = Records}) ->
-    % TODO: handle case of record not defined
-    #{fields := FieldsMap} = maps:get(RecName, Records, #{fields => #{}}),
-    wrap_parens(besidel([pp(CurRecExpr, Ctx),
-                         pipe_op(),
+pp_rec_new(RecName, Fields, Ctx = #ctxt{}) ->
+    wrap_parens(besidel([text(atom_to_list(RecName)),
+                         text("("),
                          join(Fields,
-                              {Ctx, FieldsMap},
+                              Ctx,
                               fun pp_rec_update_field/2,
-                              pipe_op())])).
+                              comma_f()),
+                         text(")")])).
 
-pp_rec_field(RecExpr,
-             RecName,
-             {atom, _, Field},
-             Ctx = #ctxt{records = Records}) ->
-    % TODO: handle case of record not defined
-    #{fields := FieldsMap} = maps:get(RecName, Records, #{fields => #{}}),
-    % TODO: handle case when record field not defined
-    #{position := Pos} = maps:get(Field, FieldsMap, 1),
-    % First item is record name
-    TuplePos = Pos + 1,
-    besidel([text("elem("),
+pp_rec_update(RecName, [], CurRecExpr, Ctx = #ctxt{}) ->
+    % zero fields record update O.o
+    wrap_parens(besidel([text(atom_to_list(RecName)),
+                         text("("),
+                         pp(CurRecExpr, Ctx),
+                         text(")")]));
+pp_rec_update(RecName, Fields, CurRecExpr, Ctx = #ctxt{}) ->
+    wrap_parens(besidel([text(atom_to_list(RecName)),
+                         text("("),
+                         pp(CurRecExpr, Ctx),
+                         text(", "),
+                         join(Fields,
+                              Ctx,
+                              fun pp_rec_update_field/2,
+                              comma_f()),
+                         text(")")])).
+
+pp_rec_field(RecExpr, RecName, {atom, _, Field}, Ctx = #ctxt{}) ->
+    besidel([text(atom_to_list(RecName)),
+             text("("),
              pp(RecExpr, Ctx),
-             text(", " ++ integer_to_list(TuplePos) ++ ")")]).
-
-pp_rec_index(RecName, {atom, _, Field}, #ctxt{records = Records}) ->
-    % TODO: handle case of record not defined
-    #{fields := FieldsMap} = maps:get(RecName, Records, #{fields => #{}}),
-    % TODO: handle case when record field not defined
-    #{position := Pos} = maps:get(Field, FieldsMap, 1),
-    % First item is record name
-    TuplePos = Pos + 1,
-    text(integer_to_list(TuplePos)).
-
-pp_rec_update_field({record_field, _, {atom, _, FieldName}, Value},
-                    {Ctx, Fields}) ->
-    % TODO: handle case when record field not defined
-    #{position := Pos} = maps:get(FieldName, Fields, #{position => 1}),
-    % First item is record name
-    TuplePos = Pos + 1,
-    besidel([text("put_elem(" ++ integer_to_list(TuplePos) ++ ", "),
-             pp(Value, Ctx),
+             text(", :"),
+             text(atom_to_list(Field)),
              text(")")]).
+
+pp_rec_index(RecName, {atom, _, Field}, #ctxt{}) ->
+    besidel([text(atom_to_list(RecName)),
+             text("("),
+             text(":" ++ atom_to_list(Field)),
+             text(")")]).
+
+pp_rec_update_field({record_field, _, {atom, _, FieldName}, Value}, Ctx) ->
+    besidel([text(atom_to_list(FieldName)), text(": "), pp(Value, Ctx)]).
 
 % TODO: if bit ops are used Bitwise must be included: https://hexdocs.pm/elixir/Bitwise.html
 map_op_reverse('rem') ->
