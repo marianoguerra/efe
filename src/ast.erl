@@ -7,13 +7,11 @@
 %% N.B. if this module is to be used as a basis for transforms then
 %% all the error cases must be handled otherwise this module just crashes!
 
--export([map/3, expr/3, reduce/4]).
-
--export([clause/3]).
+-export([map/3, reduce/4]).
+-export([clause/3, expr/3, exprs/3, head/3, guard/3, pattern/3]).
 
 map(Forms, St, MapFn) when is_list(Forms) ->
     forms(Forms, St, MapFn);
-
 map(Form, St, MapFn) ->
     form(Form, St, MapFn).
 
@@ -64,7 +62,7 @@ form(Ast = {attribute, Line, export, Es0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Es1, St1} = farity_list(Es0, St, Fn),
                  {{attribute, Line, export, Es1}, St1}
          end);
@@ -72,7 +70,7 @@ form(Ast = {attribute, Line, import, {Mod, Is0}}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Is1, St1} = farity_list(Is0, St, Fn),
                  {{attribute, Line, import, {Mod, Is1}}, St1}
          end);
@@ -80,7 +78,7 @@ form(Ast = {attribute, Line, export_type, Es0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Es1, St1} = farity_list(Es0, St, Fn),
                  {{attribute, Line, export_type, Es1}, St1}
          end);
@@ -88,7 +86,7 @@ form(Ast = {attribute, Line, optional_callbacks, Es0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  try farity_list(Es0, St, Fn) of
                      {Es1, St1} ->
                          {{attribute, Line, optional_callbacks, Es1}, St1}
@@ -103,7 +101,7 @@ form(Ast = {attribute, Line, record, {Name, Defs0}}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Defs1, St1} = record_defs(Defs0, St, Fn),
                  {{attribute, Line, record, {Name, Defs1}}, St1}
          end);
@@ -113,7 +111,7 @@ form(Ast = {attribute, Line, type, {N, T, Vs}}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {T1, St1} = type(T, St, Fn),
                  {Vs1, St2} = variable_list(Vs, St1, Fn),
                  {{attribute, Line, type, {N, T1, Vs1}}, St2}
@@ -122,7 +120,7 @@ form(Ast = {attribute, Line, opaque, {N, T, Vs}}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {T1, St1} = type(T, St, Fn),
                  {Vs1, St2} = variable_list(Vs, St1, Fn),
                  {{attribute, Line, opaque, {N, T1, Vs1}}, St2}
@@ -131,7 +129,7 @@ form(Ast = {attribute, Line, spec, {{N, A}, FTs}}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {FTs1, St1} = function_type_list(FTs, St, Fn),
                  {{attribute, Line, spec, {{N, A}, FTs1}}, St1}
          end);
@@ -139,7 +137,7 @@ form(Ast = {attribute, Line, spec, {{M, N, A}, FTs}}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {FTs1, St1} = function_type_list(FTs, St, Fn),
                  {{attribute, Line, spec, {{M, N, A}, FTs1}}, St1}
          end);
@@ -147,7 +145,7 @@ form(Ast = {attribute, Line, callback, {{N, A}, FTs}}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {FTs1, St1} = function_type_list(FTs, St, Fn),
                  {{attribute, Line, callback, {{N, A}, FTs1}}, St1}
          end);
@@ -159,8 +157,9 @@ form(Ast = {function, Line, Name0, Arity0, Clauses0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
-                 {{Name, Arity, Clauses}, St1} = function(Name0, Arity0, Clauses0, St, Fn),
+         fun (_Ast, St, Fn) ->
+                 {{Name, Arity, Clauses}, St1} =
+                     function(Name0, Arity0, Clauses0, St, Fn),
                  {{function, Line, Name, Arity, Clauses}, St1}
          end);
 %% Extra forms from the parser.
@@ -198,32 +197,42 @@ record_def(Ast = {record_field, Line, {atom, La, A}, Val0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Val1, St1} = expr(Val0, St, Fn),
                  {{record_field, Line, {atom, La, A}, Val1}, St1}
          end);
 record_def(Ast = {record_field, _Line, {atom, _La, _A}}, St, Fn) ->
     leaf(Ast, St, Fn);
-record_def(Ast = {typed_record_field, {record_field, Line, {atom, La, A}, Val0}, Type},
+record_def(Ast =
+               {typed_record_field,
+                {record_field, Line, {atom, La, A}, Val0},
+                Type},
            St,
            Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Val1, St1} = expr(Val0, St, Fn),
                  {Type1, St2} = type(Type, St1, Fn),
-                 {{typed_record_field, {record_field, Line, {atom, La, A}, Val1}, Type1}, St2}
+                 {{typed_record_field,
+                   {record_field, Line, {atom, La, A}, Val1},
+                   Type1},
+                  St2}
          end);
-record_def(Ast = {typed_record_field, {record_field, Line, {atom, La, A}}, Type},
+record_def(Ast =
+               {typed_record_field, {record_field, Line, {atom, La, A}}, Type},
            St,
            Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Type1, St1} = type(Type, St, Fn),
-                 {{typed_record_field, {record_field, Line, {atom, La, A}}, Type1}, St1}
+                 {{typed_record_field,
+                   {record_field, Line, {atom, La, A}},
+                   Type1},
+                  St1}
          end).
 
 %% -type function(atom(), integer(), [Clause], St, Fn) -> {atom(),integer(Ast=),[Clause]}.
@@ -233,12 +242,12 @@ function(Name, Arity, Clauses0, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
-                 {Clauses1, St1} = clauses(Clauses0, St, Fn),
+         fun (_Ast, StI, FnI) ->
+                 {Clauses1, St1} = clauses(Clauses0, StI, FnI),
                  {{Name, Arity, Clauses1}, St1}
          end).
 
-%% -type clauses(Ast=[Clause], St, Fn) -> [Clause].
+%% -type clauses([Clause], St, Fn) -> [Clause].
 
 clauses(Cs, St, Fn) ->
     reduce(Cs, St, Fn, fun clause/3).
@@ -249,10 +258,10 @@ clause(Ast = {clause, Line, H0, G0, B0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
-                 {H1, St1} = head(H0, St, Fn),
-                 {G1, St2} = guard(G0, St1, Fn),
-                 {B1, St3} = exprs(B0, St2, Fn),
+         fun (_Ast, StI, FnI) ->
+                 {H1, St1} = head(H0, StI, FnI),
+                 {G1, St2} = guard(G0, St1, FnI),
+                 {B1, St3} = exprs(B0, St2, FnI),
                  {{clause, Line, H1, G1, B1}, St3}
          end).
 
@@ -277,7 +286,7 @@ pattern(Ast = {match, Line, L0, R0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {L1, St1} = pattern(L0, St, Fn),
                  {R1, St2} = pattern(R0, St1, Fn),
                  {{match, Line, L1, R1}, St2}
@@ -298,7 +307,7 @@ pattern(Ast = {cons, Line, H0, T0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {H1, St1} = pattern(H0, St, Fn),
                  {T1, St2} = pattern(T0, St1, Fn),
                  {{cons, Line, H1, T1}, St2}
@@ -307,7 +316,7 @@ pattern(Ast = {tuple, Line, Ps0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Ps1, St1} = pattern_list(Ps0, St, Fn),
                  {{tuple, Line, Ps1}, St1}
          end);
@@ -315,7 +324,7 @@ pattern(Ast = {map, Line, Ps0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Ps1, St1} = pattern_list(Ps0, St, Fn),
                  {{map, Line, Ps1}, St1}
          end);
@@ -323,7 +332,7 @@ pattern(Ast = {map_field_exact, Line, K, V}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Ke, St1} = expr(K, St, Fn),
                  {Ve, St2} = pattern(V, St1, Fn),
                  {{map_field_exact, Line, Ke, Ve}, St2}
@@ -332,7 +341,7 @@ pattern(Ast = {record, Line, Name, Pfs0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Pfs1, St1} = pattern_fields(Pfs0, St, Fn),
                  {{record, Line, Name, Pfs1}, St1}
          end);
@@ -340,7 +349,7 @@ pattern(Ast = {record_index, Line, Name, Field0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Field1, St1} = pattern(Field0, St, Fn),
                  {{record_index, Line, Name, Field1}, St1}
          end);
@@ -348,7 +357,7 @@ pattern(Ast = {record_field, Line, Rec0, Name, Field0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Rec1, St1} = expr(Rec0, St, Fn),
                  {Field1, St2} = expr(Field0, St1, Fn),
                  {{record_field, Line, Rec1, Name, Field1}, St2}
@@ -357,7 +366,7 @@ pattern(Ast = {record_field, Line, Rec0, Field0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Rec1, St1} = expr(Rec0, St, Fn),
                  {Field1, St2} = expr(Field0, St1, Fn),
                  {{record_field, Line, Rec1, Field1}, St2}
@@ -366,7 +375,7 @@ pattern(Ast = {bin, Line, Fs}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Fs2, St1} = pattern_grp(Fs, St, Fn),
                  {{bin, Line, Fs2}, St1}
          end);
@@ -422,7 +431,7 @@ pattern_field(Ast = {record_field, Lf, {atom, La, F}, P0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {P1, St1} = pattern(P0, St, Fn),
                  {{record_field, Lf, {atom, La, F}, P1}, St1}
          end);
@@ -430,7 +439,7 @@ pattern_field(Ast = {record_field, Lf, {var, La, '_'}, P0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {P1, St1} = pattern(P0, St, Fn),
                  {{record_field, Lf, {var, La, '_'}, P1}, St1}
          end).
@@ -451,7 +460,7 @@ guard_test(Ast = {call, Line, {atom, La, F}, As0}, St, Fn) ->
             node(Ast,
                  St,
                  Fn,
-                 fun(_Ast, St, Fn) ->
+                 fun (_Ast, St, Fn) ->
                          {As1, St1} = gexpr_list(As0, St, Fn),
                          {{call, Line, {atom, La, F}, As1}, St1}
                  end);
@@ -484,7 +493,7 @@ gexpr(Ast = {map, Line, Map0, Es0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {[Map1 | Es1], St1} = gexpr_list([Map0 | Es0], St, Fn),
                  {{map, Line, Map1, Es1}, St1}
          end);
@@ -492,7 +501,7 @@ gexpr(Ast = {map, Line, Es0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Es1, St1} = gexpr_list(Es0, St, Fn),
                  {{map, Line, Es1}, St1}
          end);
@@ -500,7 +509,7 @@ gexpr(Ast = {map_field_assoc, Line, K, V}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Ke, St1} = gexpr(K, St, Fn),
                  {Ve, St2} = gexpr(V, St1, Fn),
                  {{map_field_assoc, Line, Ke, Ve}, St2}
@@ -509,7 +518,7 @@ gexpr(Ast = {map_field_exact, Line, K, V}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Ke, St1} = gexpr(K, St, Fn),
                  {Ve, St2} = gexpr(V, St1, Fn),
                  {{map_field_exact, Line, Ke, Ve}, St2}
@@ -518,7 +527,7 @@ gexpr(Ast = {cons, Line, H0, T0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {H1, St1} = gexpr(H0, St, Fn),
                  %They see the same variables
                  {T1, St2} = gexpr(T0, St1, Fn),
@@ -528,7 +537,7 @@ gexpr(Ast = {tuple, Line, Es0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Es1, St1} = gexpr_list(Es0, St, Fn),
                  {{tuple, Line, Es1}, St1}
          end);
@@ -536,7 +545,7 @@ gexpr(Ast = {record_index, Line, Name, Field0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Field1, St1} = gexpr(Field0, St, Fn),
                  {{record_index, Line, Name, Field1}, St1}
          end);
@@ -544,7 +553,7 @@ gexpr(Ast = {record_field, Line, Rec0, Name, Field0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Rec1, St1} = gexpr(Rec0, St, Fn),
                  {Field1, St2} = gexpr(Field0, St1, Fn),
                  {{record_field, Line, Rec1, Name, Field1}, St2}
@@ -553,7 +562,7 @@ gexpr(Ast = {record, Line, Name, Inits0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Inits1, St1} = grecord_inits(Inits0, St, Fn),
                  {{record, Line, Name, Inits1}, St1}
          end);
@@ -563,31 +572,38 @@ gexpr(Ast = {call, Line, {atom, La, F}, As0}, St, Fn) ->
             node(Ast,
                  St,
                  Fn,
-                 fun(_Ast, St, Fn) ->
+                 fun (_Ast, St, Fn) ->
                          {As1, St1} = gexpr_list(As0, St, Fn),
                          {{call, Line, {atom, La, F}, As1}, St1}
                  end)
     end;
 % Guard bif's can be remote, but only in the module erlang...
-gexpr(Ast = {call, Line, {remote, La, {atom, Lb, erlang}, {atom, Lc, F}}, As0}, St, Fn) ->
-    case erl_internal:guard_bif(F, length(As0)) or erl_internal:arith_op(F, length(As0)) or
-             erl_internal:comp_op(F, length(As0))
+gexpr(Ast = {call, Line, {remote, La, {atom, Lb, erlang}, {atom, Lc, F}}, As0},
+      St,
+      Fn) ->
+    case erl_internal:guard_bif(F, length(As0)) or
+             erl_internal:arith_op(F, length(As0))
+             or erl_internal:comp_op(F, length(As0))
              or erl_internal:bool_op(F, length(As0))
         of
         true ->
             node(Ast,
                  St,
                  Fn,
-                 fun(_Ast, St, Fn) ->
+                 fun (_Ast, St, Fn) ->
                          {As1, St1} = gexpr_list(As0, St, Fn),
-                         {{call, Line, {remote, La, {atom, Lb, erlang}, {atom, Lc, F}}, As1}, St1}
+                         {{call,
+                           Line,
+                           {remote, La, {atom, Lb, erlang}, {atom, Lc, F}},
+                           As1},
+                          St1}
                  end)
     end;
 gexpr(Ast = {bin, Line, Fs}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Fs2, St1} = pattern_grp(Fs, St, Fn),
                  {{bin, Line, Fs2}, St1}
          end);
@@ -597,17 +613,18 @@ gexpr(Ast = {op, Line, Op, A0}, St, Fn) ->
             node(Ast,
                  St,
                  Fn,
-                 fun(_Ast, St, Fn) ->
+                 fun (_Ast, St, Fn) ->
                          {A1, St1} = gexpr(A0, St, Fn),
                          {{op, Line, Op, A1}, St1}
                  end)
     end;
-gexpr(Ast = {op, Line, Op, L0, R0}, St, Fn) when Op =:= 'andalso'; Op =:= 'orelse' ->
+gexpr(Ast = {op, Line, Op, L0, R0}, St, Fn)
+    when Op =:= 'andalso'; Op =:= 'orelse' ->
     %% R11B: andalso/orelse are now allowed in guards.
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {L1, St1} = gexpr(L0, St, Fn),
                  %They see the same variables
                  {R1, St2} = gexpr(R0, St1, Fn),
@@ -621,7 +638,7 @@ gexpr(Ast = {op, Line, Op, L0, R0}, St, Fn) ->
             node(Ast,
                  St,
                  Fn,
-                 fun(_Ast, St, Fn) ->
+                 fun (_Ast, St, Fn) ->
                          {L1, St1} = gexpr(L0, St, Fn),
                          {R1, St2} = gexpr(R0, St1, Fn),
                          {{op, Line, Op, L1, R1}, St2}
@@ -642,7 +659,7 @@ grecord_init(Ast = {record_field, Lf, {atom, La, F}, Val0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Val1, St1} = gexpr(Val0, St, Fn),
                  {{record_field, Lf, {atom, La, F}, Val1}, St1}
          end);
@@ -650,7 +667,7 @@ grecord_init(Ast = {record_field, Lf, {var, La, '_'}, Val0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Val1, St1} = gexpr(Val0, St, Fn),
                  {{record_field, Lf, {var, La, '_'}, Val1}, St1}
          end).
@@ -682,7 +699,7 @@ expr(Ast = {cons, Line, H0, T0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {H1, St1} = expr(H0, St, Fn),
                  %They see the same variables
                  {T1, St2} = expr(T0, St1, Fn),
@@ -692,7 +709,7 @@ expr(Ast = {lc, Line, E0, Qs0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Qs1, St1} = lc_bc_quals(Qs0, St, Fn),
                  {E1, St2} = expr(E0, St1, Fn),
                  {{lc, Line, E1, Qs1}, St2}
@@ -701,7 +718,7 @@ expr(Ast = {bc, Line, E0, Qs0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Qs1, St1} = lc_bc_quals(Qs0, St, Fn),
                  {E1, St2} = expr(E0, St1, Fn),
                  {{bc, Line, E1, Qs1}, St2}
@@ -710,7 +727,7 @@ expr(Ast = {tuple, Line, Es0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Es1, St1} = expr_list(Es0, St, Fn),
                  {{tuple, Line, Es1}, St1}
          end);
@@ -718,7 +735,7 @@ expr(Ast = {map, Line, Map0, Es0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {[Map1 | Es1], St1} = exprs([Map0 | Es0], St, Fn),
                  {{map, Line, Map1, Es1}, St1}
          end);
@@ -726,7 +743,7 @@ expr(Ast = {map, Line, Es0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Es1, St1} = exprs(Es0, St, Fn),
                  {{map, Line, Es1}, St1}
          end);
@@ -734,7 +751,7 @@ expr(Ast = {map_field_assoc, Line, K, V}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Ke, St1} = expr(K, St, Fn),
                  {Ve, St2} = expr(V, St1, Fn),
                  {{map_field_assoc, Line, Ke, Ve}, St2}
@@ -743,7 +760,7 @@ expr(Ast = {map_field_exact, Line, K, V}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Ke, St1} = expr(K, St, Fn),
                  {Ve, St2} = expr(V, St1, Fn),
                  {{map_field_exact, Line, Ke, Ve}, St2}
@@ -752,7 +769,7 @@ expr(Ast = {record_index, Line, Name, Field0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Field1, St1} = expr(Field0, St, Fn),
                  {{record_index, Line, Name, Field1}, St1}
          end);
@@ -760,7 +777,7 @@ expr(Ast = {record, Line, Name, Inits0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Inits1, St1} = record_inits(Inits0, St, Fn),
                  {{record, Line, Name, Inits1}, St1}
          end);
@@ -768,7 +785,7 @@ expr(Ast = {record_field, Line, Rec0, Name, Field0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Rec1, St1} = expr(Rec0, St, Fn),
                  {Field1, St2} = expr(Field0, St1, Fn),
                  {{record_field, Line, Rec1, Name, Field1}, St2}
@@ -777,7 +794,7 @@ expr(Ast = {record, Line, Rec0, Name, Upds0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Rec1, St1} = expr(Rec0, St, Fn),
                  {Upds1, St2} = record_updates(Upds0, St1, Fn),
                  {{record, Line, Rec1, Name, Upds1}, St2}
@@ -786,7 +803,7 @@ expr(Ast = {record_field, Line, Rec0, Field0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Rec1, St1} = expr(Rec0, St, Fn),
                  {Field1, St2} = expr(Field0, St1, Fn),
                  {{record_field, Line, Rec1, Field1}, St2}
@@ -796,7 +813,7 @@ expr(Ast = {block, Line, Es0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Es1, St1} = exprs(Es0, St, Fn),
                  {{block, Line, Es1}, St1}
          end);
@@ -804,7 +821,7 @@ expr(Ast = {'if', Line, Cs0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Cs1, St1} = icr_clauses(Cs0, St, Fn),
                  {{'if', Line, Cs1}, St1}
          end);
@@ -812,7 +829,7 @@ expr(Ast = {'case', Line, E0, Cs0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {E1, St1} = expr(E0, St, Fn),
                  {Cs1, St2} = icr_clauses(Cs0, St1, Fn),
                  {{'case', Line, E1, Cs1}, St2}
@@ -821,7 +838,7 @@ expr(Ast = {'receive', Line, Cs0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Cs1, St1} = icr_clauses(Cs0, St, Fn),
                  {{'receive', Line, Cs1}, St1}
          end);
@@ -829,7 +846,7 @@ expr(Ast = {'receive', Line, Cs0, To0, ToEs0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {To1, St1} = expr(To0, St, Fn),
                  {ToEs1, St2} = exprs(ToEs0, St1, Fn),
                  {Cs1, St3} = icr_clauses(Cs0, St2, Fn),
@@ -839,46 +856,44 @@ expr(Ast = {'try', Line, Es0, Scs0, Ccs0, As0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Es1, St1} = exprs(Es0, St, Fn),
                  {Scs1, St2} = icr_clauses(Scs0, St1, Fn),
                  {Ccs1, St3} = icr_clauses(Ccs0, St2, Fn),
                  {As1, St4} = exprs(As0, St3, Fn),
                  {{'try', Line, Es1, Scs1, Ccs1, As1}, St4}
          end);
-expr(Ast = {'fun', Line, Body}, St, Fn) ->
-    case Body of
-        {clauses, Cs0} ->
-            node(Ast,
-                 St,
-                 Fn,
-                 fun(_Ast, St, Fn) ->
-                         {Cs1, St1} = fun_clauses(Cs0, St, Fn),
-                         {{'fun', Line, {clauses, Cs1}}, St1}
-                 end);
-        {function, F, A} ->
-            leaf({'fun', Line, {function, F, A}}, St, Fn);
-        {function, M, F, A} when is_atom(M), is_atom(F), is_integer(A) ->
-            %% R10B-6: fun M:F/A. (Backward compatibility)
-            leaf({'fun', Line, {function, M, F, A}}, St, Fn);
-        {function, M0, F0, A0} ->
-            %% R15: fun M:F/A with variables.
-            node(Ast,
-                 St,
-                 Fn,
-                 fun(_Ast, St, Fn) ->
-                         {M, St1} = expr(M0, St, Fn),
-                         {F, St2} = expr(F0, St1, Fn),
-                         {A, St3} = expr(A0, St2, Fn),
-                         {{'fun', Line, {function, M, F, A}}, St3}
-                 end)
-    end;
+expr(Ast = {'fun', Line, {clauses, Cs0}}, St, Fn) ->
+    node(Ast,
+         St,
+         Fn,
+         fun (_Ast, StI, FnI) ->
+                 {Cs1, St1} = fun_clauses(Cs0, StI, FnI),
+                 {{'fun', Line, {clauses, Cs1}}, St1}
+         end);
+expr(Ast = {'fun', _Line, {function, _F, _A}}, St, Fn) ->
+    leaf(Ast, St, Fn);
+expr(Ast = {'fun', _Line, {function, M, F, A}}, St, Fn)
+    when is_atom(M), is_atom(F), is_integer(A) ->
+    %% R10B-6: fun M:F/A. (Backward compatibility)
+    leaf(Ast, St, Fn);
+expr(Ast = {'fun', Line, {function, M0, F0, A0}}, St, Fn) ->
+    %% R15: fun M:F/A with variables.
+    node(Ast,
+         St,
+         Fn,
+         fun (_Ast, StI, FnI) ->
+                 {M, St1} = expr(M0, StI, FnI),
+                 {F, St2} = expr(F0, St1, FnI),
+                 {A, St3} = expr(A0, St2, FnI),
+                 {{'fun', Line, {function, M, F, A}}, St3}
+         end);
 expr(Ast = {named_fun, Loc, Name, Cs}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
-                 {Cs1, St1} = fun_clauses(Cs, St, Fn),
+         fun (_Ast, StI, FnI) ->
+                 {Cs1, St1} = fun_clauses(Cs, StI, FnI),
                  {{named_fun, Loc, Name, Cs1}, St1}
          end);
 expr(Ast = {call, Line, F0, As0}, St, Fn) ->
@@ -888,7 +903,7 @@ expr(Ast = {call, Line, F0, As0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {F1, St1} = expr(F0, St, Fn),
                  {As1, St2} = expr_list(As0, St1, Fn),
                  {{call, Line, F1, As1}, St2}
@@ -898,7 +913,7 @@ expr(Ast = {'catch', Line, E0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {E1, St1} = expr(E0, St, Fn),
                  {{'catch', Line, E1}, St1}
          end);
@@ -906,7 +921,7 @@ expr(Ast = {match, Line, P0, E0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {E1, St1} = expr(E0, St, Fn),
                  {P1, St2} = pattern(P0, St1, Fn),
                  {{match, Line, P1, E1}, St2}
@@ -915,7 +930,7 @@ expr(Ast = {bin, Line, Fs}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Fs2, St1} = pattern_grp(Fs, St, Fn),
                  {{bin, Line, Fs2}, St1}
          end);
@@ -923,7 +938,7 @@ expr(Ast = {op, Line, Op, A0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {A1, St1} = expr(A0, St, Fn),
                  {{op, Line, Op, A1}, St1}
          end);
@@ -931,7 +946,7 @@ expr(Ast = {op, Line, Op, L0, R0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {L1, St1} = expr(L0, St, Fn),
                  %They see the same variables
                  {R1, St2} = expr(R0, St1, Fn),
@@ -942,7 +957,7 @@ expr(Ast = {remote, Line, M0, F0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {M1, St1} = expr(M0, St, Fn),
                  {F1, St2} = expr(F0, St1, Fn),
                  {{remote, Line, M1, F1}, St2}
@@ -966,7 +981,7 @@ record_init(Ast = {record_field, Lf, {atom, La, F}, Val0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Val1, St1} = expr(Val0, St, Fn),
                  {{record_field, Lf, {atom, La, F}, Val1}, St1}
          end);
@@ -974,7 +989,7 @@ record_init(Ast = {record_field, Lf, {var, La, '_'}, Val0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Val1, St1} = expr(Val0, St, Fn),
                  {{record_field, Lf, {var, La, '_'}, Val1}, St1}
          end).
@@ -990,8 +1005,8 @@ record_update(Ast = {record_field, Lf, {atom, La, F}, Val0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
-                 {Val1, St1} = expr(Val0, St, Fn),
+         fun (_Ast, StI, FnI) ->
+                 {Val1, St1} = expr(Val0, StI, FnI),
                  {{record_field, Lf, {atom, La, F}, Val1}, St1}
          end).
 
@@ -1013,18 +1028,18 @@ lc_bc_qual(Ast = {generate, Line, P0, E0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
-                 {E1, St1} = expr(E0, St, Fn),
-                 {P1, St2} = pattern(P0, St1, Fn),
+         fun (_Ast, StI, FnI) ->
+                 {E1, St1} = expr(E0, StI, FnI),
+                 {P1, St2} = pattern(P0, St1, FnI),
                  {{generate, Line, P1, E1}, St2}
          end);
 lc_bc_qual(Ast = {b_generate, Line, P0, E0}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
-                 {E1, St1} = expr(E0, St, Fn),
-                 {P1, St2} = pattern(P0, St1, Fn),
+         fun (_Ast, StI, FnI) ->
+                 {E1, St1} = expr(E0, StI, FnI),
+                 {P1, St2} = pattern(P0, St1, FnI),
                  {{b_generate, Line, P1, E1}, St2}
          end);
 lc_bc_qual(Ast, St, Fn) ->
@@ -1045,19 +1060,21 @@ function_type_list_item(Ast = {type, Line, bounded_fun, [Ft, Fc]}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
-                 {Ft1, St1} = function_type(Ft, St, Fn),
-                 {Fc1, St2} = function_constraint(Fc, St1, Fn),
+         fun (_Ast, StI, FnI) ->
+                 {Ft1, St1} = function_type(Ft, StI, FnI),
+                 {Fc1, St2} = function_constraint(Fc, St1, FnI),
                  {{type, Line, bounded_fun, [Ft1, Fc1]}, St2}
          end);
 function_type_list_item(Ft, St, Fn) ->
     function_type(Ft, St, Fn).
 
-function_type(Ast = {type, Line, 'fun', [{type, Lt, product, As}, B]}, St, Fn) ->
+function_type(Ast = {type, Line, 'fun', [{type, Lt, product, As}, B]},
+              St,
+              Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {As1, St1} = type_list(As, St, Fn),
                  {B1, St2} = type(B, St1, Fn),
                  {{type, Line, 'fun', [{type, Lt, product, As1}, B1]}, St2}
@@ -1073,7 +1090,7 @@ constraint(Ast = {type, Line, constraint, [{atom, L, A}, [V, T]]}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {V1, St1} = type(V, St, Fn),
                  {T1, St2} = type(T, St1, Fn),
                  {{type, Line, constraint, [{atom, L, A}, [V1, T1]]}, St2}
@@ -1083,7 +1100,7 @@ type(Ast = {ann_type, Line, [{var, Lv, V}, T]}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {T1, St1} = type(T, St, Fn),
                  {{ann_type, Line, [{var, Lv, V}, T1]}, St1}
          end);
@@ -1095,7 +1112,7 @@ type(Ast = {op, Line, Op, T}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {T1, St1} = type(T, St, Fn),
                  {{op, Line, Op, T1}, St1}
          end);
@@ -1103,7 +1120,7 @@ type(Ast = {op, Line, Op, L, R}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {L1, St1} = type(L, St, Fn),
                  {R1, St2} = type(R, St1, Fn),
                  {{op, Line, Op, L1, R1}, St2}
@@ -1112,7 +1129,7 @@ type(Ast = {type, Line, binary, [M, N]}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {M1, St1} = type(M, St, Fn),
                  {N1, St2} = type(N, St1, Fn),
                  {{type, Line, binary, [M1, N1]}, St2}
@@ -1123,7 +1140,7 @@ type(Ast = {type, Line, 'fun', [{type, Lt, any}, B]}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {B1, St1} = type(B, St, Fn),
                  {{type, Line, 'fun', [{type, Lt, any}, B1]}, St1}
          end);
@@ -1131,7 +1148,7 @@ type(Ast = {type, Line, range, [L, H]}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {L1, St1} = type(L, St, Fn),
                  {H1, St2} = type(H, St1, Fn),
                  {{type, Line, range, [L1, H1]}, St2}
@@ -1142,7 +1159,7 @@ type(Ast = {type, Line, map, Ps}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Ps1, St1} = map_pair_types(Ps, St, Fn),
                  {{type, Line, map, Ps1}, St1}
          end);
@@ -1150,7 +1167,7 @@ type(Ast = {type, Line, record, [{atom, La, N} | Fs]}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Fs1, St1} = field_types(Fs, St, Fn),
                  {{type, Line, record, [{atom, La, N} | Fs1]}, St1}
          end);
@@ -1158,7 +1175,7 @@ type(Ast = {remote_type, Line, [{atom, Lm, M}, {atom, Ln, N}, As]}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {As1, St1} = type_list(As, St, Fn),
                  {{remote_type, Line, [{atom, Lm, M}, {atom, Ln, N}, As1]}, St1}
          end);
@@ -1168,7 +1185,7 @@ type(Ast = {type, Line, tuple, Ts}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Ts1, St1} = type_list(Ts, St, Fn),
                  {{type, Line, tuple, Ts1}, St1}
          end);
@@ -1176,7 +1193,7 @@ type(Ast = {type, Line, union, Ts}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {Ts1, St1} = type_list(Ts, St, Fn),
                  {{type, Line, union, Ts1}, St1}
          end);
@@ -1186,7 +1203,7 @@ type(Ast = {user_type, Line, N, As}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {As1, St1} = type_list(As, St, Fn),
                  {{user_type, Line, N, As1}, St1}
          end);
@@ -1194,7 +1211,7 @@ type(Ast = {type, Line, N, As}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {As1, St1} = type_list(As, St, Fn),
                  {{type, Line, N, As1}, St1}
          end).
@@ -1206,7 +1223,7 @@ map_pair_type(Ast = {type, Line, map_field_assoc, [K, V]}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {K1, St1} = type(K, St, Fn),
                  {V1, St2} = type(V, St1, Fn),
                  {{type, Line, map_field_assoc, [K1, V1]}, St2}
@@ -1215,7 +1232,7 @@ map_pair_type(Ast = {type, Line, map_field_exact, [K, V]}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {K1, St1} = type(K, St, Fn),
                  {V1, St2} = type(V, St1, Fn),
                  {{type, Line, map_field_exact, [K1, V1]}, St2}
@@ -1228,7 +1245,7 @@ field_type(Ast = {type, Line, field_type, [{atom, La, A}, T]}, St, Fn) ->
     node(Ast,
          St,
          Fn,
-         fun(_Ast, St, Fn) ->
+         fun (_Ast, St, Fn) ->
                  {T1, St1} = type(T, St, Fn),
                  {{type, Line, field_type, [{atom, La, A}, T1]}, St1}
          end).

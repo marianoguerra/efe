@@ -33,7 +33,8 @@ with_ast(Path, Fn) ->
                 Fn(Ast)
             catch
                 T:E:S ->
-                    {error, #{code => exception, type => T, error => E, stack => S}}
+                    {error,
+                     #{code => exception, type => T, error => E, stack => S}}
             end;
         Other ->
             Other
@@ -45,7 +46,8 @@ annotate(Path) ->
                      efe_var_ann:do(Ast)
              end).
 
-from_erl(Path) -> epp:parse_file(Path, [], []).
+from_erl(Path) ->
+    epp:parse_file(Path, [], []).
 
 pprint_ex(Path) ->
     case from_erl(Path) of
@@ -53,8 +55,11 @@ pprint_ex(Path) ->
             try
                 {AnnAst, _St} = efe_var_ann:do(Ast),
                 io:format("~s~n", [efe_pp:format(AnnAst)])
-            catch T:E:S ->
-                io:format("Error formatting ~p: ~p:~p~n~p~n", [Path, T, E, S])
+            catch
+                T:E:S ->
+                    io:format("Error formatting ~p: ~p:~p~n~p~n",
+                              [Path, T, E, S])
             end;
-        Other -> io:format("Error: ~p~n", [Other])
+        Other ->
+            io:format("Error: ~p~n", [Other])
     end.
