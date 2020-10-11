@@ -125,6 +125,9 @@ pp({attribute, _, dialyzer, _}, _Ctx) ->
 % TODO: handle callback
 pp({attribute, _, callback, _}, _Ctx) ->
     empty();
+% TODO:
+pp({attribute, _, removed, _}, _Ctx) ->
+    empty();
 % TODO: handle optional_callbacks
 pp({attribute, _, optional_callbacks, _}, _Ctx) ->
     empty();
