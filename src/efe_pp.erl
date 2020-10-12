@@ -28,7 +28,7 @@
          follow/3]).
 -import(erl_parse, [inop_prec/1, preop_prec/1]).
 
-% TODO: binary comprehensions
+% TODO: binary comprehensions: https://elixir-lang.org/getting-started/comprehensions.html#bitstring-generators
 % TODO: non short circuit bool ops (and, or)
 
 % used on tests
