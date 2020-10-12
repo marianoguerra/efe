@@ -28,9 +28,6 @@
          follow/3]).
 -import(erl_parse, [inop_prec/1, preop_prec/1]).
 
-% TODO: binary comprehensions: https://elixir-lang.org/getting-started/comprehensions.html#bitstring-generators
-% TODO: non short circuit bool ops (and, or)
-
 % used on tests
 -export([pp_guards/2, default_ctx/0]).
 
@@ -286,6 +283,11 @@ pp({op, _, Op, Right}, Ctx) ->
 pp({lc, _, Body, Gens}, Ctx) ->
     Ctx1 = reset_prec(Ctx),
     pp_for(Gens, Ctx1, pp(Body, Ctx1));
+% https://elixir-lang.org/getting-started/comprehensions.html#bitstring-generators
+% http://www.arh68.com/2016/01/17/drinking-more-elixir.html
+pp({bc, _, Body, Gens}, Ctx) ->
+    Ctx1 = reset_prec(Ctx),
+    pp_bfor(Gens, Ctx1, pp(Body, Ctx1));
 pp({block, _, Body}, Ctx) ->
     Ctx1 = reset_prec(Ctx),
     above(text("("), above(nestc(Ctx1, pp_body(Body, Ctx1)), text(")")));
@@ -703,7 +705,11 @@ pp_try_catch_case_items([Type, Var, StackTrace], Ctx) ->
     pp_items([Type, Var, StackTrace], Ctx).
 
 pp_for(Gens, Ctx, BodyL) ->
-    above(sep([text("for"), pp_lc_gens(Gens, Ctx), dok()]),
+    above(besidel([text("for "), pp_lc_gens(Gens, Ctx), text(" do")]),
+          above(nestc(Ctx, BodyL), text("end"))).
+
+pp_bfor(Gens, Ctx, BodyL) ->
+    above(sep([text("for"), pp_lc_gens(Gens, Ctx), text(", into: <<>> do")]),
           above(nestc(Ctx, BodyL), text("end"))).
 
 pp_lc_gens(Items, Ctx) ->
@@ -711,10 +717,8 @@ pp_lc_gens(Items, Ctx) ->
 
 pp_lc_gen({generate, _, Left, Right}, Ctx) ->
     wrap(text(" <- "), pp(Left, Ctx), pp(Right, Ctx));
-% if there's a b_generate the for loop should be tagged with #b so it should be
-% handled as a b_generate anyway?
 pp_lc_gen({b_generate, _, Left, Right}, Ctx) ->
-    wrap(text(" <- "), pp(Left, Ctx), pp(Right, Ctx));
+    besidel([text("<< "), wrap(text(" <- "), pp(Left, Ctx), pp(Right, Ctx)), text(" >>")]);
 pp_lc_gen(Filter, Ctx) ->
     pp(Filter, Ctx).
 
@@ -1380,8 +1384,4 @@ transform_var_name(V) ->
     end.
 
 op_to_erlang_call(Line, Op, Left, Right, Ctx) ->
-    pp({call,
-        Line,
-        {remote, Line, {atom, Line, erlang}, {atom, Line, Op}},
-        [Left, Right]},
-       Ctx).
+    pp({call, Line, {remote, Line, {atom, Line, erlang}, {atom, Line, Op}}, [Left, Right]}, Ctx).
