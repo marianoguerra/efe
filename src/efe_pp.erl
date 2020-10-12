@@ -263,6 +263,12 @@ pp({op, _, 'rem', Left, Right}, Ctx) ->
     call_op("rem(", Left, Right, Ctx);
 pp({op, _, '!', Left, Right}, Ctx) ->
     call_op("send(", Left, Right, Ctx);
+pp({op, Line, 'and', Left, Right}, Ctx) ->
+    op_to_erlang_call(Line, 'and', Left, Right, Ctx);
+pp({op, Line, 'or', Left, Right}, Ctx) ->
+    op_to_erlang_call(Line, 'or', Left, Right, Ctx);
+pp({op, Line, 'xor', Left, Right}, Ctx) ->
+    op_to_erlang_call(Line, 'xor', Left, Right, Ctx);
 pp({op, _, Op, Left, Right}, Ctx) ->
     {LeftPrec, Prec, RightPrec} = inop_prec(Op),
     D1 = pp(Left, Ctx#ctxt{prec = LeftPrec}),
@@ -891,12 +897,8 @@ map_op_reverse('bnot') ->
     '~~~';
 map_op_reverse('andalso') ->
     'and';
-map_op_reverse('and') ->
-    '&&';
 map_op_reverse('orelse') ->
     'or';
-map_op_reverse('or') ->
-    '||';
 map_op_reverse('xor') ->
     'xor';
 map_op_reverse('!') ->
@@ -1376,3 +1378,10 @@ transform_var_name(V) ->
         [H | T] ->
             string:lowercase([H]) ++ T
     end.
+
+op_to_erlang_call(Line, Op, Left, Right, Ctx) ->
+    pp({call,
+        Line,
+        {remote, Line, {atom, Line, erlang}, {atom, Line, Op}},
+        [Left, Right]},
+       Ctx).

@@ -1,4 +1,5 @@
 -module(bincomp).
+
 -export([simple/0]).
 
 simple() ->
