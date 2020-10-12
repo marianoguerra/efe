@@ -163,6 +163,12 @@ pp({attribute, _, deprecated, module}, _Ctx) ->
 pp({attribute, _, deprecated, Funs}, Ctx) ->
     besidel([text("@deprecated "),
              join(Funs, Ctx, fun pp_fn_deprecated_ref/2, comma_f())]);
+% TODO:
+pp({attribute, _, deprecated_type, _}, _Ctx) ->
+    empty();
+% TODO:
+pp({attribute, _, removed_type, _}, _Ctx) ->
+    empty();
 pp({attribute, _, inline, Exports}, Ctx) ->
     pp_attr_fun_list("@inline ", Exports, Ctx);
 pp({attribute, _, export, _}, _Ctx) ->
@@ -1368,7 +1374,12 @@ should_prefix_erlang_call({_, _, _}, _Arity) ->
 should_prefix_erlang_call({var, _, _, _}, _Arity) ->
     false;
 should_prefix_erlang_call(FName, Arity) when is_atom(FName), is_number(Arity) ->
-    is_autoimported(FName, Arity) andalso not is_ex_autoimport(FName, Arity).
+    is_autoimported(FName, Arity) andalso not is_ex_autoimport(FName, Arity);
+% stuff like {call,826,{atom,826,predef_fun},[]}
+should_prefix_erlang_call({call, _, _, _}, _Arity) ->
+    false;
+should_prefix_erlang_call({record_field, _, _RecExpr, _RecName, _Field}, _Arity) ->
+    false.
 
 is_ex_reserved('cond') ->
     true;
