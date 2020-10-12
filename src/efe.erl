@@ -56,7 +56,7 @@ pprint_ex(Path, DoPrint) ->
         {ok, Ast} ->
             try
                 {AnnAst, _St} = efe_var_ann:do(Ast),
-				case DoPrint of
+                case DoPrint of
                     true ->
                         io:format("~s~n", [efe_pp:format(AnnAst)]);
                     false ->

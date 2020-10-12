@@ -108,11 +108,8 @@ map(_Ast, _St) ->
     auto.
 
 function(Name, Arity, Clauses0, St) ->
-    {Clauses1, _St1} = ast:reduce(Clauses0, St, fun map/2, fun clause/3),
+    {Clauses1, _St1} = ast:reduce(Clauses0, St, fun map/2, fun fun_clause/3),
     {{Name, Arity, Clauses1}, St}.
-
-clause(Cs, St, Fn) ->
-    ast:clause(Cs, enter_scope(St), Fn).
 
 expr(A, S) ->
     ast:expr(A, S, fun map/2).
@@ -124,9 +121,16 @@ icr_clauses(Cs, St) ->
     ast:reduce(Cs, St, fun map/2, fun match_clause/3).
 
 fun_clauses(Cs, St) ->
-    {Cs1, _St1} = ast:reduce(Cs, enter_scope(St), fun map/2, fun clause/3),
+    {Cs1, _St1} = ast:reduce(Cs, St, fun map/2, fun fun_clause/3),
     % discard all information inside an inline fun
     {Cs1, St}.
+
+fun_clause({clause, Line, H0, G0, B0}, St, Fn) ->
+    % don't set_matching in head since we don't need it in function head
+    {H1, St1} = ast:head(H0, St, Fn),
+    {G1, St2} = ast:guard(G0, St1, Fn),
+    {B1, _St3} = ast:exprs(B0, St2, Fn),
+    {{clause, Line, H1, G1, B1}, St}.
 
 match_clause({clause, Line, H0, G0, B0}, St, Fn) ->
     {H1, St1} = ast:head(H0, set_matching(St), Fn),

@@ -118,6 +118,8 @@ case_expr_not_matching() ->
 
 vars_in_clauses(A) ->
     case A of
-        {B, 1} -> B;
-        {1, B} -> B
+        {B, 1} ->
+            B;
+        {1, B} ->
+            B
     end.

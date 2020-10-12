@@ -297,7 +297,7 @@ pp({'if', _, Clauses}, Ctx) ->
     above(text("cond do"),
           above(nestc(Ctx, pp_if_clauses(Clauses, Ctx)), endk()));
 pp({'case', _, Expr, Clauses}, Ctx) ->
-    above(parc(Ctx, [text("case"), sep([pp(Expr, Ctx), dok()])]),
+    above(parc(Ctx, [text("case"), besidel([pp(Expr, Ctx), text(" do")])]),
           above(nestc(Ctx, pp_case_clauses(Clauses, Ctx)), text("end")));
 % receive no after
 pp({'receive', _, Clauses}, Ctx0) ->
@@ -458,9 +458,6 @@ dcolon_f() ->
 endk() ->
     text("end\n").
 
-dok() ->
-    text("do").
-
 pipe() ->
     text("|").
 
@@ -528,7 +525,7 @@ pp_fn_ref({FNameAtom, Arity}, _Ctx) ->
 pp_fn_import_ref({FNameAtom, Arity}, _Ctx) ->
     text("" ++ a2l(FNameAtom) ++ ": " ++ arity_to_list(Arity)).
 
-pp_fn_deprecated_ref({FName, Arity, When}, _Ctx) ->
+pp_fn_deprecated_ref({FName, Arity, When}, _Ctx) when is_atom(When) ->
     text("(" ++
              a2l(FName) ++
                  ", " ++ arity_to_list(Arity) ++ ", " ++ a2l(When) ++ ")");
@@ -720,7 +717,9 @@ pp_lc_gens(Items, Ctx) ->
 pp_lc_gen({generate, _, Left, Right}, Ctx) ->
     wrap(text(" <- "), pp(Left, Ctx), pp(Right, Ctx));
 pp_lc_gen({b_generate, _, Left, Right}, Ctx) ->
-    besidel([text("<< "), wrap(text(" <- "), pp(Left, Ctx), pp(Right, Ctx)), text(" >>")]);
+    besidel([text("<< "),
+             wrap(text(" <- "), pp(Left, Ctx), pp(Right, Ctx)),
+             text(" >>")]);
 pp_lc_gen(Filter, Ctx) ->
     pp(Filter, Ctx).
 
@@ -871,6 +870,8 @@ pp_rec_index(RecName, {atom, _, Field}, #ctxt{}) ->
              text(":" ++ atom_to_list(Field)),
              text(")")]).
 
+pp_rec_update_field({record_field, _, {var, _, '_'}, Value}, Ctx) ->
+    besidel([text("_"), text(": "), pp(Value, Ctx)]);
 pp_rec_update_field({record_field, _, {atom, _, FieldName}, Value}, Ctx) ->
     besidel([text(atom_to_list(FieldName)), text(": "), pp(Value, Ctx)]).
 
@@ -1372,6 +1373,33 @@ is_ex_reserved(else) ->
 is_ex_reserved(_) ->
     false.
 
+is_ex_reserved_varname("when") ->
+    true;
+is_ex_reserved_varname("and") ->
+    true;
+is_ex_reserved_varname("or") ->
+    true;
+is_ex_reserved_varname("not") ->
+    true;
+is_ex_reserved_varname("in") ->
+    true;
+is_ex_reserved_varname("fn") ->
+    true;
+is_ex_reserved_varname("do") ->
+    true;
+is_ex_reserved_varname("end") ->
+    true;
+is_ex_reserved_varname("catch") ->
+    true;
+is_ex_reserved_varname("rescue") ->
+    true;
+is_ex_reserved_varname("after") ->
+    true;
+is_ex_reserved_varname("else") ->
+    true;
+is_ex_reserved_varname(_) ->
+    false.
+
 a2l(V) ->
     atom_to_list(V).
 
@@ -1382,8 +1410,18 @@ transform_var_name(V) ->
         [H] ->
             string:lowercase([H]);
         [H | T] ->
-            string:lowercase([H]) ++ T
+            VarName = string:lowercase([H]) ++ T,
+            case is_ex_reserved_varname(VarName) of
+                true ->
+                    VarName ++ "__";
+                false ->
+                    VarName
+            end
     end.
 
 op_to_erlang_call(Line, Op, Left, Right, Ctx) ->
-    pp({call, Line, {remote, Line, {atom, Line, erlang}, {atom, Line, Op}}, [Left, Right]}, Ctx).
+    pp({call,
+        Line,
+        {remote, Line, {atom, Line, erlang}, {atom, Line, Op}},
+        [Left, Right]},
+       Ctx).
