@@ -71,7 +71,7 @@ reset_prec(Ctxt) ->
 pp_mod([], _Ctx) ->
     empty();
 pp_mod([{attribute, _, module, ModName} | Nodes], Ctx) ->
-    above(text("defmodule :" ++ a2l(ModName) ++ " do"),
+    above(text("defmodule :m_" ++ a2l(ModName) ++ " do"),
           above(nestc(Ctx, pp_mod(Nodes, Ctx)), text("end")));
 pp_mod([Node = {attribute, _, record, {RecName, Fields}} | Nodes], Ctx) ->
     Ctx1 = add_record_declaration(RecName, Fields, Ctx),
@@ -262,19 +262,18 @@ pp({op, _, 'rem', Left, Right}, Ctx) ->
     call_op("rem(", Left, Right, Ctx);
 pp({op, _, '!', Left, Right}, Ctx) ->
     call_op("send(", Left, Right, Ctx);
-pp({op, Line, 'and', Left, Right}, Ctx) ->
-    op_to_erlang_call(Line, 'and', Left, Right, Ctx);
-pp({op, Line, 'or', Left, Right}, Ctx) ->
-    op_to_erlang_call(Line, 'or', Left, Right, Ctx);
-pp({op, Line, 'xor', Left, Right}, Ctx) ->
-    op_to_erlang_call(Line, 'xor', Left, Right, Ctx);
-pp({op, _, Op, Left, Right}, Ctx) ->
-    {LeftPrec, Prec, RightPrec} = inop_prec(Op),
-    D1 = pp(Left, Ctx#ctxt{prec = LeftPrec}),
-    D2 = text(atom_to_list(map_op_reverse(Op))),
-    D3 = pp(Right, Ctx#ctxt{prec = RightPrec}),
-    D4 = parc(Ctx, [D1, D2, D3]),
-    maybe_paren(Prec, Ctx#ctxt.prec, D4);
+pp({op, Line, Op, Left, Right}, Ctx) ->
+    case is_erlang_op(Op) of
+        true ->
+            op_to_erlang_call(Line, Op, Left, Right, Ctx);
+        false ->
+            {LeftPrec, Prec, RightPrec} = inop_prec(Op),
+            D1 = pp(Left, Ctx#ctxt{prec = LeftPrec}),
+            D2 = text(atom_to_list(map_op_reverse(Op))),
+            D3 = pp(Right, Ctx#ctxt{prec = RightPrec}),
+            D4 = parc(Ctx, [D1, D2, D3]),
+            maybe_paren(Prec, Ctx#ctxt.prec, D4)
+    end;
 % unary
 pp({op, _, Op, Right}, Ctx) ->
     {Prec, RightPrec} = preop_prec(Op),
@@ -529,11 +528,15 @@ pp_fn_deprecated_ref({FName, Arity, When}, _Ctx) when is_atom(When) ->
     text("(" ++
              a2l(FName) ++
                  ", " ++ arity_to_list(Arity) ++ ", " ++ a2l(When) ++ ")");
+pp_fn_deprecated_ref({FName, Arity, Msg}, _Ctx) when is_list(Msg) ->
+    text("(" ++
+         a2l(FName) ++
+         ", " ++ arity_to_list(Arity) ++ ", " ++ io_lib:write_string(Msg) ++ ")");
 pp_fn_deprecated_ref(FnRef, Ctx) ->
     pp_fn_ref(FnRef, Ctx).
 
 arity_to_list('_') ->
-    "`_`";
+    ":_";
 arity_to_list(V) ->
     integer_to_list(V).
 
@@ -831,7 +834,7 @@ parse_record_field({record_field, _, {atom, _, Name}, Default}, Pos) ->
     {Name, #{default => Default, position => Pos + 1}}.
 
 pp_rec_new(RecName, Fields, Ctx = #ctxt{}) ->
-    wrap_parens(besidel([text(atom_to_list(RecName)),
+    wrap_parens(besidel([p_rec_name(RecName),
                          text("("),
                          join(Fields,
                               Ctx,
@@ -841,12 +844,12 @@ pp_rec_new(RecName, Fields, Ctx = #ctxt{}) ->
 
 pp_rec_update(RecName, [], CurRecExpr, Ctx = #ctxt{}) ->
     % zero fields record update O.o
-    wrap_parens(besidel([text(atom_to_list(RecName)),
+    wrap_parens(besidel([p_rec_name(RecName),
                          text("("),
                          pp(CurRecExpr, Ctx),
                          text(")")]));
 pp_rec_update(RecName, Fields, CurRecExpr, Ctx = #ctxt{}) ->
-    wrap_parens(besidel([text(atom_to_list(RecName)),
+    wrap_parens(besidel([p_rec_name(RecName),
                          text("("),
                          pp(CurRecExpr, Ctx),
                          text(", "),
@@ -857,7 +860,7 @@ pp_rec_update(RecName, Fields, CurRecExpr, Ctx = #ctxt{}) ->
                          text(")")])).
 
 pp_rec_field(RecExpr, RecName, {atom, _, Field}, Ctx = #ctxt{}) ->
-    besidel([text(atom_to_list(RecName)),
+    besidel([p_rec_name(RecName),
              text("("),
              pp(RecExpr, Ctx),
              text(", :"),
@@ -865,7 +868,7 @@ pp_rec_field(RecExpr, RecName, {atom, _, Field}, Ctx = #ctxt{}) ->
              text(")")]).
 
 pp_rec_index(RecName, {atom, _, Field}, #ctxt{}) ->
-    besidel([text(atom_to_list(RecName)),
+    besidel([p_rec_name(RecName),
              text("("),
              text(":" ++ atom_to_list(Field)),
              text(")")]).
@@ -932,6 +935,27 @@ map_op_reverse('/=') ->
     '!=';
 map_op_reverse('=/=') ->
     '!=='.
+
+is_erlang_op('and') ->
+    true;
+is_erlang_op('or') ->
+    true;
+is_erlang_op('xor') ->
+    true;
+is_erlang_op('bor') ->
+    true;
+is_erlang_op('band') ->
+    true;
+is_erlang_op('bxor') ->
+    true;
+is_erlang_op('bsr') ->
+    true;
+is_erlang_op('bsl') ->
+    true;
+is_erlang_op('bnot') ->
+    true;
+is_erlang_op(_) ->
+    false.
 
 is_autoimported(abs, 1) ->
     true;
@@ -1346,6 +1370,14 @@ should_prefix_erlang_call({var, _, _, _}, _Arity) ->
 should_prefix_erlang_call(FName, Arity) when is_atom(FName), is_number(Arity) ->
     is_autoimported(FName, Arity) andalso not is_ex_autoimport(FName, Arity).
 
+is_ex_reserved('cond') ->
+    true;
+is_ex_reserved('if') ->
+    true;
+is_ex_reserved('unless') ->
+    true;
+is_ex_reserved('case') ->
+    true;
 is_ex_reserved('when') ->
     true;
 is_ex_reserved('and') ->
@@ -1373,6 +1405,14 @@ is_ex_reserved(else) ->
 is_ex_reserved(_) ->
     false.
 
+is_ex_reserved_varname("if") ->
+    true;
+is_ex_reserved_varname("unless") ->
+    true;
+is_ex_reserved_varname("cond") ->
+    true;
+is_ex_reserved_varname("case") ->
+    true;
 is_ex_reserved_varname("when") ->
     true;
 is_ex_reserved_varname("and") ->
@@ -1425,3 +1465,10 @@ op_to_erlang_call(Line, Op, Left, Right, Ctx) ->
         {remote, Line, {atom, Line, erlang}, {atom, Line, Op}},
         [Left, Right]},
        Ctx).
+
+p_rec_name(RecName) ->
+    case a2l(RecName) of
+        Name=[H | _] when H >= $A andalso H =< $Z ->
+            text([":" | Name]);
+        Name -> text(Name)
+    end.
