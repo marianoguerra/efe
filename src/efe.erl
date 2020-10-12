@@ -9,7 +9,9 @@
 
 %% escript Entry point
 main(["pp", Path]) ->
-    pprint_ex(Path);
+    pprint_ex(Path, true);
+main(["ppe", Path]) ->
+    pprint_ex(Path, false);
 main(["ann", Path]) ->
     {Ast, _St} = annotate(Path),
     pprint({ok, Ast});
@@ -49,12 +51,17 @@ annotate(Path) ->
 from_erl(Path) ->
     epp:parse_file(Path, [], []).
 
-pprint_ex(Path) ->
+pprint_ex(Path, DoPrint) ->
     case from_erl(Path) of
         {ok, Ast} ->
             try
                 {AnnAst, _St} = efe_var_ann:do(Ast),
-                io:format("~s~n", [efe_pp:format(AnnAst)])
+				case DoPrint of
+                    true ->
+                        io:format("~s~n", [efe_pp:format(AnnAst)]);
+                    false ->
+                        ok
+                end
             catch
                 T:E:S ->
                     io:format("Error formatting ~p: ~p:~p~n~p~n",

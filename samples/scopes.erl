@@ -2,7 +2,7 @@
 
 -export([noop/0, simple_scope/0, other_scope/1, multi_clause/1, case_match/0,
          receive_match/0, try_match/0, fun_scope/0, named_fun_scope/0,
-         lc_scope/0, case_expr_not_matching/0]).
+         lc_scope/0, case_expr_not_matching/0, vars_in_clauses/1]).
 
 noop() ->
     ok.
@@ -114,4 +114,10 @@ case_expr_not_matching() ->
         of
         1 ->
             ok
+    end.
+
+vars_in_clauses(A) ->
+    case A of
+        {B, 1} -> B;
+        {1, B} -> B
     end.

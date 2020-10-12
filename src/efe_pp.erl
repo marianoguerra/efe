@@ -80,7 +80,7 @@ pp_mod([Node = {attribute, _, record, {RecName, Fields}} | Nodes], Ctx) ->
             true ->
                 {Ctx1, empty()};
             false ->
-                {Ctx1#ctxt{record_imported = true}, text("use Record")}
+                {Ctx1#ctxt{record_imported = true}, text("require Record")}
         end,
     abovel([Cont, pp(Node, Ctx2), pp_mod(Nodes, Ctx2)]);
 pp_mod([Node | Nodes], Ctx) ->
@@ -193,6 +193,8 @@ pp({string, _, V}, _Ctx) ->
     text(io_lib:write_string(V, $'));
 pp({bin, _, [{bin_element, _, {string, _, V}, default, default}]}, _Ctx) ->
     text(io_lib:write_string(V));
+pp({char, _, " "}, _Ctx) ->
+    text("?\s");
 pp({char, _, V}, _Ctx) ->
     text("?" ++ [V]);
 %% TODO: record

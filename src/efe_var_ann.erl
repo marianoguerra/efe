@@ -131,8 +131,8 @@ fun_clauses(Cs, St) ->
 match_clause({clause, Line, H0, G0, B0}, St, Fn) ->
     {H1, St1} = ast:head(H0, set_matching(St), Fn),
     {G1, St2} = ast:guard(G0, clear_matching(St1), Fn),
-    {B1, St3} = ast:exprs(B0, St2, Fn),
-    {{clause, Line, H1, G1, B1}, St3}.
+    {B1, _St3} = ast:exprs(B0, St2, Fn),
+    {{clause, Line, H1, G1, B1}, St}.
 
 lc_bc_quals(Qs, St) ->
     ast:reduce(Qs, St, fun map/2, fun lc_bc_qual/3).
