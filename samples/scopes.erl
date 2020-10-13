@@ -2,7 +2,10 @@
 
 -export([noop/0, simple_scope/0, other_scope/1, multi_clause/1, case_match/0,
          receive_match/0, try_match/0, fun_scope/0, named_fun_scope/0,
-         lc_scope/0, case_expr_not_matching/0, vars_in_clauses/1]).
+         lc_scope/0, case_expr_not_matching/0, vars_in_clauses/1,
+		 var_in_prev_fun/1, var_in_prev_fun1/1, match_in_head/2]).
+
+-record(user, {username = <<"meg">>}).
 
 noop() ->
     ok.
@@ -123,3 +126,8 @@ vars_in_clauses(A) ->
         {1, B} ->
             B
     end.
+
+var_in_prev_fun(A) -> A.
+var_in_prev_fun1(B) -> A = B + B - B + -B, A.
+
+match_in_head(Username, #user{username=Username}) -> Username.

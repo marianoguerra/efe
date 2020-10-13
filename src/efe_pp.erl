@@ -203,8 +203,24 @@ pp({string, _, V}, _Ctx) ->
     text(io_lib:write_string(V, $'));
 pp({bin, _, [{bin_element, _, {string, _, V}, default, default}]}, _Ctx) ->
     text(io_lib:write_string(V));
-pp({char, _, " "}, _Ctx) ->
-    text("?\s");
+pp({char, _, $\s}, _Ctx) ->
+    text("?\\s");
+pp({char, _, $\r}, _Ctx) ->
+    text("?\\r");
+pp({char, _, $\t}, _Ctx) ->
+    text("?\\t");
+pp({char, _, $\n}, _Ctx) ->
+    text("?\\n");
+pp({char, _, $\f}, _Ctx) ->
+    text("?\\f");
+pp({char, _, $\e}, _Ctx) ->
+    text("?\\e");
+pp({char, _, $\d}, _Ctx) ->
+    text("?\\d");
+pp({char, _, $\b}, _Ctx) ->
+    text("?\\b");
+pp({char, _, $\v}, _Ctx) ->
+    text("?\\v");
 pp({char, _, V}, _Ctx) ->
     text("?" ++ [V]);
 %% TODO: record
@@ -224,13 +240,15 @@ pp({'fun', Line, {function, FName, Arity}}, Ctx) ->
            wrap(text("/"),
                 pp_call_pos({atom, Line, FName}, "", Ctx),
                 pp({integer, Line, Arity}, Ctx)));
-pp({'fun', _, {function, MName, FName, Arity}}, Ctx) ->
+pp({'fun', _, {function, MName={atom, _, _}, FName={atom, _, _}, Arity={integer, _, _}}}, Ctx) ->
     beside(text("&"),
            wrap(text("/"),
                 wrap(dot_f(),
                      pp_call_pos(MName, ":", Ctx),
                      pp_call_pos(FName, "", Ctx)),
                 pp(Arity, Ctx)));
+pp({'fun', _, {function, MName, FName, Arity}}, Ctx) ->
+	besidel([text("Function.capture("), pp(MName, Ctx), text(", "), pp(FName, Ctx), text(", "), pp(Arity, Ctx), text(")")]);
 pp({nil, _}, _Ctx) ->
     text("[]");
 pp(V = {cons, _, _H, _T}, Ctx) ->
@@ -265,7 +283,7 @@ pp({function, _, Name, Arity, Clauses}, Ctx) ->
     % HACK: force a new line above each top level function
     pp_function_clauses(Clauses, Name, DefKw, Ctx);
 pp({match, _, Left, Right}, Ctx) ->
-    parc(Ctx, [pp(Left, Ctx), text("="), pp(Right, Ctx)]);
+    sep([pp(Left, Ctx), text("="), pp(Right, Ctx)]);
 pp({op, _, 'div', Left, Right}, Ctx) ->
     call_op("div(", Left, Right, Ctx);
 pp({op, _, 'rem', Left, Right}, Ctx) ->
@@ -281,7 +299,7 @@ pp({op, Line, Op, Left, Right}, Ctx) ->
             D1 = pp(Left, Ctx#ctxt{prec = LeftPrec}),
             D2 = text(atom_to_list(map_op_reverse(Op))),
             D3 = pp(Right, Ctx#ctxt{prec = RightPrec}),
-            D4 = parc(Ctx, [D1, D2, D3]),
+            D4 = sep([D1, D2, D3]),
             maybe_paren(Prec, Ctx#ctxt.prec, D4)
     end;
 % unary
@@ -289,7 +307,7 @@ pp({op, _, Op, Right}, Ctx) ->
     {Prec, RightPrec} = preop_prec(Op),
     LOp = text(atom_to_list(map_op_reverse(Op))),
     LRight = pp(Right, Ctx#ctxt{prec = RightPrec}),
-    L = parc(Ctx, [LOp, LRight]),
+    L = sep([LOp, LRight]),
     maybe_paren(Prec, Ctx#ctxt.prec, L);
 pp({lc, _, Body, Gens}, Ctx) ->
     Ctx1 = reset_prec(Ctx),
@@ -307,10 +325,9 @@ pp({'if', _, Clauses}, Ctx) ->
           above(nestc(Ctx, pp_if_clauses(Clauses, Ctx)), endk()));
 pp({'case', _, Expr, Clauses}, Ctx) ->
     % TODO: not always wrap Expr in paren, only nested statements
-    above(parc(Ctx,
-               [text("case"),
-                besidel([wrap_parens(pp(Expr, Ctx)), text(" do")])]),
-          above(nestc(Ctx, pp_case_clauses(Clauses, Ctx)), text("end")));
+    above(
+	  besidel([text("case"), wrap_parens(pp(Expr, Ctx)), text(" do")]),
+	  above(nestc(Ctx, pp_case_clauses(Clauses, Ctx)), text("end")));
 % receive no after
 pp({'receive', _, Clauses}, Ctx0) ->
     Ctx = reset_prec(Ctx0),
@@ -581,9 +598,9 @@ pp_call_f(MName, FName, Args, Ctx, PPFun) ->
            pp_args(Args, Ctx, PPFun)).
 
 pp_call_pos(V = {var, _, _}, _, Ctx) ->
-    pp(V, Ctx);
+    beside(pp(V, Ctx), text("."));
 pp_call_pos(V = {var, _, _, _}, _, Ctx) ->
-    pp(V, Ctx);
+    beside(pp(V, Ctx), text("."));
 pp_call_pos({atom, _, V}, Prefix, _Ctx) ->
     text(Prefix ++ a2l(V));
 pp_call_pos(V, _, Ctx) ->

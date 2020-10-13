@@ -10,13 +10,21 @@ new_scope(Vars) ->
     #{vars => Vars}.
 
 new_state() ->
-    #{scope => new_scope(), scopes => [], matching => false}.
+    #{scope => new_scope(), scopes => [], matching => false, never_match => false}.
 
+set_matching(S=#{never_match := true}) ->
+    S;
 set_matching(S) ->
     S#{matching := true}.
 
 clear_matching(S) ->
     S#{matching := false}.
+
+set_never_match(S) ->
+    S#{never_match := true}.
+
+clear_never_match(S) ->
+    S#{never_match := false}.
 
 % http://icai.ektf.hu/pdf/ICAI2007-vol2-pp137-145.pdf
 enter_scope(S = #{scope := Scope = #{vars := Vars}, scopes := Scopes}) ->
@@ -67,6 +75,22 @@ map({'try', Line, Es0, Scs0, Ccs0, As0}, St) ->
     {As1, St4} = exprs(As0, St3),
     {ok, {'try', Line, Es1, Scs1, Ccs1, As1}, St4};
 % new scopes
+map({attribute, Line, spec, {{N, A}, FTs}}, St) ->
+	% ignore vars introduced in specs
+	Fn = fun map/2,
+	{FTs1, _St1} = ast:function_type_list(FTs, St, Fn),
+	{ok, {attribute, Line, spec, {{N, A}, FTs1}}, St};
+map({attribute, Line, spec, {{M, N, A}, FTs}}, St) ->
+	% ignore vars introduced in specs
+	Fn = fun map/2,
+	{FTs1, _St1} = ast:function_type_list(FTs, St, Fn),
+	{ok, {attribute, Line, spec, {{M, N, A}, FTs1}}, St};
+map({attribute, Line, type, {N, T, Vs}}, St) ->
+	% ignore vars introduced in types
+	Fn = fun map/2,
+    {T1, St1} = ast:type(T, St, Fn),
+    {Vs1, _St2} = ast:variable_list(Vs, St1, Fn),
+    {ok, {attribute, Line, type, {N, T1, Vs1}}, St};
 map({'fun', Line, {clauses, Cs0}}, St) ->
     {Cs1, St1} = fun_clauses(Cs0, St),
     {ok, {'fun', Line, {clauses, Cs1}}, St1};
@@ -127,8 +151,8 @@ fun_clauses(Cs, St) ->
 
 fun_clause({clause, Line, H0, G0, B0}, St, Fn) ->
     % don't set_matching in head since we don't need it in function head
-    {H1, St1} = ast:head(H0, St, Fn),
-    {G1, St2} = ast:guard(G0, St1, Fn),
+    {H1, St1} = ast:head(H0, set_never_match(St), Fn),
+    {G1, St2} = ast:guard(G0, clear_never_match(St1), Fn),
     {B1, _St3} = ast:exprs(B0, St2, Fn),
     {{clause, Line, H1, G1, B1}, St}.
 
