@@ -307,7 +307,7 @@ pp({op, _, '!', Left, Right}, Ctx) ->
 pp({op, Line, Op, Left, Right}, Ctx) ->
     case is_erlang_op(Op) of
         true ->
-            op_to_erlang_call(Line, Op, Left, Right, Ctx);
+            op_to_erlang_call(Line, Op, [Left, Right], Ctx);
         false ->
             {LeftPrec, Prec, RightPrec} = inop_prec(Op),
             D1 = pp(Left, Ctx#ctxt{prec = LeftPrec}),
@@ -317,12 +317,17 @@ pp({op, Line, Op, Left, Right}, Ctx) ->
             maybe_paren(Prec, Ctx#ctxt.prec, D4)
     end;
 % unary
-pp({op, _, Op, Right}, Ctx) ->
-    {Prec, RightPrec} = preop_prec(Op),
-    LOp = text(atom_to_list(map_op_reverse(Op))),
-    LRight = pp(Right, Ctx#ctxt{prec = RightPrec}),
-    L = sep([LOp, LRight]),
-    maybe_paren(Prec, Ctx#ctxt.prec, L);
+pp({op, Line, Op, Right}, Ctx) ->
+    case is_erlang_op(Op) of
+        true ->
+            op_to_erlang_call(Line, Op, [Right], Ctx);
+        false ->
+            {Prec, RightPrec} = preop_prec(Op),
+            LOp = text(atom_to_list(map_op_reverse(Op))),
+            LRight = pp(Right, Ctx#ctxt{prec = RightPrec}),
+            L = sep([LOp, LRight]),
+            maybe_paren(Prec, Ctx#ctxt.prec, L)
+    end;
 pp({lc, _, Body, Gens}, Ctx) ->
     Ctx1 = reset_prec(Ctx),
     pp_for(Gens, Ctx1, pp(Body, Ctx1));
@@ -813,14 +818,19 @@ pp_bin_es(Es, Ctx) ->
     join(Es, Ctx, fun pp_bin_e/2, comma_f()).
 
 pp_bin_e({bin_element, _, Left, default, [binary]}, Ctx) ->
-    wrap_pair(Ctx, dcolon_f(), pp(Left, Ctx), text("binary"));
+    wrap_pair(Ctx, dcolon_f(), pp_bin_e_v(Left, Ctx), text("binary"));
 pp_bin_e({bin_element, _, Left, Size, default}, Ctx) when Size =/= default ->
-    wrap_pair(Ctx, dcolon_f(), pp(Left, Ctx), pp(Size, Ctx));
+    wrap_pair(Ctx, dcolon_f(), pp_bin_e_v(Left, Ctx), pp(Size, Ctx));
 pp_bin_e({bin_element, _, Left, default, default}, Ctx) ->
-    pp(Left, Ctx);
+    pp_bin_e_v(Left, Ctx);
 pp_bin_e({bin_element, _, Left, Size, Types}, Ctx) ->
     TypeMap = pp_bin_e_types(Types, Size, Ctx),
     wrap_pair(Ctx, dcolon_f(), pp(Left, Ctx), TypeMap).
+
+pp_bin_e_v({string, _, V}, _Ctx) ->
+    text(io_lib:write_string(V));
+pp_bin_e_v(V, Ctx) ->
+    pp(V, Ctx).
 
 pp_bin_e_types(Types, default, Ctx) ->
     pp_bin_e_types(Types, Ctx);
@@ -1498,11 +1508,11 @@ transform_var_name(V) ->
             end
     end.
 
-op_to_erlang_call(Line, Op, Left, Right, Ctx) ->
+op_to_erlang_call(Line, Op, Args, Ctx) ->
     pp({call,
         Line,
         {remote, Line, {atom, Line, erlang}, {atom, Line, Op}},
-        [Left, Right]},
+        Args},
        Ctx).
 
 p_rec_name(RecName) ->

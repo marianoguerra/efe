@@ -1,6 +1,6 @@
 -module(cornercases).
 
--export([varnames/12, atoms/0, chars/0, calls/3, calls/0, long_calc/0]).
+-export([varnames/12, atoms/0, chars/0, calls/3, calls/0, long_calc/0, binops/0]).
 
 varnames(When, And, Or, Not, In, Fn, Do, End, Catch, Rescue, After, Else) ->
     {When, And, Or, Not, In, Fn, Do, End, Catch, Rescue, After, Else}.
@@ -50,3 +50,6 @@ long_calc() ->
         + 1
         + 1
         + 1.
+
+binops() ->
+    bnot (1 bsl 2).
