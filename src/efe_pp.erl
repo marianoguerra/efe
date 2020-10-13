@@ -152,17 +152,21 @@ pp({attribute, _, import, {ModNameAtom, Imports}}, Ctx) ->
                                   Ctx,
                                   fun pp_fn_import_ref/2,
                                   comma_f()))));
-pp({attribute, _, export_type, Exports}, Ctx) ->
-    pp_attr_fun_list("@export_type ", Exports, Ctx);
+% TODO:
+pp({attribute, _, export_type, _Exports}, _Ctx) ->
+    % pp_attr_fun_list("@export_type ", Exports, Ctx);
+    empty();
 pp({attribute, _, on_load, V = {_FName, _Arity}}, Ctx) ->
     besidel([text("@on_load "), pp_fn_ref(V, Ctx)]);
-pp({attribute, _, deprecated, V = {_FName, _Arity, _When}}, Ctx) ->
-    besidel([text("@deprecated "), pp_fn_deprecated_ref(V, Ctx)]);
+pp({attribute, _, deprecated, _V = {_FName, _Arity, _When}}, _Ctx) ->
+    %besidel([text("@deprecated "), pp_fn_deprecated_ref(V, Ctx)]);
+    empty();
 pp({attribute, _, deprecated, module}, _Ctx) ->
     text("@deprecated :module");
-pp({attribute, _, deprecated, Funs}, Ctx) ->
-    besidel([text("@deprecated "),
-             join(Funs, Ctx, fun pp_fn_deprecated_ref/2, comma_f())]);
+pp({attribute, _, deprecated, _Funs}, _Ctx) ->
+    %besidel([text("@deprecated "),
+    %         join(Funs, Ctx, fun pp_fn_deprecated_ref/2, comma_f())]);
+    empty();
 % TODO:
 pp({attribute, _, deprecated_type, _}, _Ctx) ->
     empty();
@@ -302,7 +306,10 @@ pp({'if', _, Clauses}, Ctx) ->
     above(text("cond do"),
           above(nestc(Ctx, pp_if_clauses(Clauses, Ctx)), endk()));
 pp({'case', _, Expr, Clauses}, Ctx) ->
-    above(parc(Ctx, [text("case"), besidel([pp(Expr, Ctx), text(" do")])]),
+    % TODO: not always wrap Expr in paren, only nested statements
+    above(parc(Ctx,
+               [text("case"),
+                besidel([wrap_parens(pp(Expr, Ctx)), text(" do")])]),
           above(nestc(Ctx, pp_case_clauses(Clauses, Ctx)), text("end")));
 % receive no after
 pp({'receive', _, Clauses}, Ctx0) ->
@@ -408,17 +415,21 @@ gen_attr(Attr, V) when is_list(V) ->
 
 quote_atom_raw(V) ->
     Chars = a2l(V),
+    case io_lib:quote_atom(V, Chars) of
+        true ->
+            [":" | io_lib:write_string(Chars)];
+        false ->
+			[":" | Chars]
+	end.
+
+quote_record_field(V) ->
+    Chars = a2l(V),
     % will quote all erlang reserved words, I think it's ok
     case io_lib:quote_atom(V, Chars) of
         true ->
-            ":" ++ io_lib:write_string(Chars);
+            io_lib:write_string(Chars);
         false ->
-            case is_ex_reserved(V) of
-                true ->
-                    ":" ++ io_lib:write_string(Chars);
-                false ->
-                    ":" ++ Chars
-            end
+			Chars
     end.
 
 comma_f() ->
@@ -536,8 +547,10 @@ pp_fn_deprecated_ref({FName, Arity, When}, _Ctx) when is_atom(When) ->
                  ", " ++ arity_to_list(Arity) ++ ", " ++ a2l(When) ++ ")");
 pp_fn_deprecated_ref({FName, Arity, Msg}, _Ctx) when is_list(Msg) ->
     text("(" ++
-         a2l(FName) ++
-         ", " ++ arity_to_list(Arity) ++ ", " ++ io_lib:write_string(Msg) ++ ")");
+             a2l(FName) ++
+                 ", " ++
+                     arity_to_list(Arity) ++
+                         ", " ++ io_lib:write_string(Msg) ++ ")");
 pp_fn_deprecated_ref(FnRef, Ctx) ->
     pp_fn_ref(FnRef, Ctx).
 
@@ -639,9 +652,12 @@ wrap_pair(Ctx, Sep, Left, Right) ->
 %    parc(Ctx, [beside(Left, Sep), Right]).
 
 maybe_paren(P, Prec, Expr) when P < Prec ->
-    beside(beside(oparen_f(), Expr), cparen_f());
+    wrap_paren(Expr);
 maybe_paren(_P, _Prec, Expr) ->
     Expr.
+
+wrap_paren(Expr) ->
+    beside(beside(oparen_f(), Expr), cparen_f()).
 
 pp_if_clauses([Clause], Ctx) ->
     pp_if_clause(Clause, Ctx);
@@ -830,7 +846,7 @@ pp_record_field_decl({record_field, L1, {atom, L2, Name}}, Ctx) ->
                           {atom, L2, undefined}},
                          Ctx);
 pp_record_field_decl({record_field, _, {atom, _, Name}, Default}, Ctx) ->
-    besidel([text(atom_to_list(Name)), text(": "), pp(Default, Ctx)]).
+    besidel([text(quote_record_field(Name)), text(": "), pp(Default, Ctx)]).
 
 parse_record_field({typed_record_field, Field, _Type}, Pos) ->
     parse_record_field(Field, Pos);
@@ -870,7 +886,7 @@ pp_rec_field(RecExpr, RecName, {atom, _, Field}, Ctx = #ctxt{}) ->
              text("("),
              pp(RecExpr, Ctx),
              text(", :"),
-             text(atom_to_list(Field)),
+             text(quote_record_field(Field)),
              text(")")]).
 
 pp_rec_index(RecName, {atom, _, Field}, #ctxt{}) ->
@@ -882,7 +898,7 @@ pp_rec_index(RecName, {atom, _, Field}, #ctxt{}) ->
 pp_rec_update_field({record_field, _, {var, _, '_'}, Value}, Ctx) ->
     besidel([text("_"), text(": "), pp(Value, Ctx)]);
 pp_rec_update_field({record_field, _, {atom, _, FieldName}, Value}, Ctx) ->
-    besidel([text(atom_to_list(FieldName)), text(": "), pp(Value, Ctx)]).
+    besidel([text(quote_record_field(FieldName)), text(": "), pp(Value, Ctx)]).
 
 % TODO: if bit ops are used Bitwise must be included: https://hexdocs.pm/elixir/Bitwise.html
 map_op_reverse('rem') ->
@@ -1378,42 +1394,8 @@ should_prefix_erlang_call(FName, Arity) when is_atom(FName), is_number(Arity) ->
 % stuff like {call,826,{atom,826,predef_fun},[]}
 should_prefix_erlang_call({call, _, _, _}, _Arity) ->
     false;
-should_prefix_erlang_call({record_field, _, _RecExpr, _RecName, _Field}, _Arity) ->
-    false.
-
-is_ex_reserved('cond') ->
-    true;
-is_ex_reserved('if') ->
-    true;
-is_ex_reserved('unless') ->
-    true;
-is_ex_reserved('case') ->
-    true;
-is_ex_reserved('when') ->
-    true;
-is_ex_reserved('and') ->
-    true;
-is_ex_reserved('or') ->
-    true;
-is_ex_reserved('not') ->
-    true;
-is_ex_reserved(in) ->
-    true;
-is_ex_reserved(fn) ->
-    true;
-is_ex_reserved(do) ->
-    true;
-is_ex_reserved('end') ->
-    true;
-is_ex_reserved('catch') ->
-    true;
-is_ex_reserved(rescue) ->
-    true;
-is_ex_reserved('after') ->
-    true;
-is_ex_reserved(else) ->
-    true;
-is_ex_reserved(_) ->
+should_prefix_erlang_call({record_field, _, _RecExpr, _RecName, _Field},
+                          _Arity) ->
     false.
 
 is_ex_reserved_varname("if") ->
@@ -1479,7 +1461,8 @@ op_to_erlang_call(Line, Op, Left, Right, Ctx) ->
 
 p_rec_name(RecName) ->
     case a2l(RecName) of
-        Name=[H | _] when H >= $A andalso H =< $Z ->
+        Name = [H | _] when H >= $A andalso H =< $Z ->
             text([":" | Name]);
-        Name -> text(Name)
+        Name ->
+            text(Name)
     end.
