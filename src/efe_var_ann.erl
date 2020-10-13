@@ -10,9 +10,12 @@ new_scope(Vars) ->
     #{vars => Vars}.
 
 new_state() ->
-    #{scope => new_scope(), scopes => [], matching => false, never_match => false}.
+    #{scope => new_scope(),
+      scopes => [],
+      matching => false,
+      never_match => false}.
 
-set_matching(S=#{never_match := true}) ->
+set_matching(S = #{never_match := true}) ->
     S;
 set_matching(S) ->
     S#{matching := true}.
@@ -53,9 +56,9 @@ map({match, Line, Left, Right}, St) ->
     R = {match, Line, Left1, Right1},
     {ok, R, clear_matching(St1)};
 % if doesn't match on head?
-%map( {'if', Line, Cs0}, St) ->
-%    {Cs1, St1} = icr_clauses(Cs0, St),
-%    {ok, {'if', Line, Cs1}, St1};
+map({'if', Line, Cs0}, St) ->
+    {Cs1, St1} = icr_clauses(Cs0, St),
+    {ok, {'if', Line, Cs1}, St1};
 map({'case', Line, E0, Cs0}, St) ->
     {E1, St1} = expr(E0, St),
     {Cs1, St2} = icr_clauses(Cs0, St1),
@@ -76,18 +79,18 @@ map({'try', Line, Es0, Scs0, Ccs0, As0}, St) ->
     {ok, {'try', Line, Es1, Scs1, Ccs1, As1}, St4};
 % new scopes
 map({attribute, Line, spec, {{N, A}, FTs}}, St) ->
-	% ignore vars introduced in specs
-	Fn = fun map/2,
-	{FTs1, _St1} = ast:function_type_list(FTs, St, Fn),
-	{ok, {attribute, Line, spec, {{N, A}, FTs1}}, St};
+    % ignore vars introduced in specs
+    Fn = fun map/2,
+    {FTs1, _St1} = ast:function_type_list(FTs, St, Fn),
+    {ok, {attribute, Line, spec, {{N, A}, FTs1}}, St};
 map({attribute, Line, spec, {{M, N, A}, FTs}}, St) ->
-	% ignore vars introduced in specs
-	Fn = fun map/2,
-	{FTs1, _St1} = ast:function_type_list(FTs, St, Fn),
-	{ok, {attribute, Line, spec, {{M, N, A}, FTs1}}, St};
+    % ignore vars introduced in specs
+    Fn = fun map/2,
+    {FTs1, _St1} = ast:function_type_list(FTs, St, Fn),
+    {ok, {attribute, Line, spec, {{M, N, A}, FTs1}}, St};
 map({attribute, Line, type, {N, T, Vs}}, St) ->
-	% ignore vars introduced in types
-	Fn = fun map/2,
+    % ignore vars introduced in types
+    Fn = fun map/2,
     {T1, St1} = ast:type(T, St, Fn),
     {Vs1, _St2} = ast:variable_list(Vs, St1, Fn),
     {ok, {attribute, Line, type, {N, T1, Vs1}}, St};

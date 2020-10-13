@@ -9,7 +9,7 @@
 
 -export([map/3, reduce/4]).
 -export([clause/3, expr/3, exprs/3, head/3, guard/3, pattern/3,
-		 function_type_list/3, type/3, variable_list/3]).
+         function_type_list/3, type/3, variable_list/3]).
 
 map(Forms, St, MapFn) when is_list(Forms) ->
     forms(Forms, St, MapFn);

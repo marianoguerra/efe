@@ -110,9 +110,11 @@ pp({attribute, _, type, _}, _Ctx) ->
 % TODO: handle opaque
 pp({attribute, _, opaque, _}, _Ctx) ->
     empty();
+pp({attribute, _, record, {RecName, []}}, _Ctx) ->
+    besidel([text("Record.defrecord("), quote_atom(RecName), text(")")]);
 pp({attribute, _, record, {RecName, Fields}}, Ctx) ->
-    besidel([text("Record.defrecord(:"),
-             text(atom_to_list(RecName)),
+    besidel([text("Record.defrecord("),
+             quote_atom(RecName),
              text(", "),
              join(Fields, Ctx, fun pp_record_field_decl/2, comma_f()),
              text(")")]);
@@ -240,7 +242,13 @@ pp({'fun', Line, {function, FName, Arity}}, Ctx) ->
            wrap(text("/"),
                 pp_call_pos({atom, Line, FName}, "", Ctx),
                 pp({integer, Line, Arity}, Ctx)));
-pp({'fun', _, {function, MName={atom, _, _}, FName={atom, _, _}, Arity={integer, _, _}}}, Ctx) ->
+pp({'fun',
+    _,
+    {function,
+     MName = {atom, _, _},
+     FName = {atom, _, _},
+     Arity = {integer, _, _}}},
+   Ctx) ->
     beside(text("&"),
            wrap(text("/"),
                 wrap(dot_f(),
@@ -248,7 +256,13 @@ pp({'fun', _, {function, MName={atom, _, _}, FName={atom, _, _}, Arity={integer,
                      pp_call_pos(FName, "", Ctx)),
                 pp(Arity, Ctx)));
 pp({'fun', _, {function, MName, FName, Arity}}, Ctx) ->
-	besidel([text("Function.capture("), pp(MName, Ctx), text(", "), pp(FName, Ctx), text(", "), pp(Arity, Ctx), text(")")]);
+    besidel([text("Function.capture("),
+             pp(MName, Ctx),
+             text(", "),
+             pp(FName, Ctx),
+             text(", "),
+             pp(Arity, Ctx),
+             text(")")]);
 pp({nil, _}, _Ctx) ->
     text("[]");
 pp(V = {cons, _, _H, _T}, Ctx) ->
@@ -283,7 +297,7 @@ pp({function, _, Name, Arity, Clauses}, Ctx) ->
     % HACK: force a new line above each top level function
     pp_function_clauses(Clauses, Name, DefKw, Ctx);
 pp({match, _, Left, Right}, Ctx) ->
-    sep([pp(Left, Ctx), text("="), pp(Right, Ctx)]);
+    besidel([pp(Left, Ctx), text(" = "), pp(Right, Ctx)]);
 pp({op, _, 'div', Left, Right}, Ctx) ->
     call_op("div(", Left, Right, Ctx);
 pp({op, _, 'rem', Left, Right}, Ctx) ->
@@ -299,7 +313,7 @@ pp({op, Line, Op, Left, Right}, Ctx) ->
             D1 = pp(Left, Ctx#ctxt{prec = LeftPrec}),
             D2 = text(atom_to_list(map_op_reverse(Op))),
             D3 = pp(Right, Ctx#ctxt{prec = RightPrec}),
-            D4 = sep([D1, D2, D3]),
+            D4 = besidel([D1, text(" "), D2, text(" "), D3]),
             maybe_paren(Prec, Ctx#ctxt.prec, D4)
     end;
 % unary
@@ -322,12 +336,11 @@ pp({block, _, Body}, Ctx) ->
     above(text("("), above(nestc(Ctx1, pp_body(Body, Ctx1)), text(")")));
 pp({'if', _, Clauses}, Ctx) ->
     above(text("cond do"),
-          above(nestc(Ctx, pp_if_clauses(Clauses, Ctx)), endk()));
+          above(nestc(Ctx, pp_if_clauses(Clauses, Ctx)), text("end")));
 pp({'case', _, Expr, Clauses}, Ctx) ->
     % TODO: not always wrap Expr in paren, only nested statements
-    above(
-	  besidel([text("case"), wrap_parens(pp(Expr, Ctx)), text(" do")]),
-	  above(nestc(Ctx, pp_case_clauses(Clauses, Ctx)), text("end")));
+    above(besidel([text("case "), wrap_parens(pp(Expr, Ctx)), text(" do")]),
+          above(nestc(Ctx, pp_case_clauses(Clauses, Ctx)), text("end")));
 % receive no after
 pp({'receive', _, Clauses}, Ctx0) ->
     Ctx = reset_prec(Ctx0),
@@ -350,13 +363,13 @@ pp({'receive', _, Clauses, AfterExpr, AfterBody}, Ctx0) ->
             text("end")]);
 pp({'catch', _, Expr}, Ctx0) ->
     Ctx = reset_prec(Ctx0),
-    above(text("try do"),
+    above(text("(try do"),
           abovel([nestc(Ctx, pp(Expr, Ctx)),
                   text("catch"),
-                  text("  :error, e -> {:\"EXIT\", {e, __STACKTRACE__}}"),
-                  text("  :exit, e -> {:\"EXIT\", e}"),
+                  text("  :error, e -> {:EXIT, {e, __STACKTRACE__}}"),
+                  text("  :exit, e -> {:EXIT, e}"),
                   text("  e -> e"),
-                  text("end")]));
+                  text("end)")]));
 pp({'try', _, Body, [], Clauses, AfterBody}, Ctx0) ->
     Ctx = reset_prec(Ctx0),
     above(text("try do"),
@@ -432,12 +445,12 @@ gen_attr(Attr, V) when is_list(V) ->
 
 quote_atom_raw(V) ->
     Chars = a2l(V),
-    case io_lib:quote_atom(V, Chars) of
-        true ->
+    case re:run(Chars, "^[a-zA-Z_][a-zA-Z0-9@_]*$") of
+        nomatch ->
             [":" | io_lib:write_string(Chars)];
-        false ->
-			[":" | Chars]
-	end.
+        {match, _} ->
+            [":" | Chars]
+    end.
 
 quote_record_field(V) ->
     Chars = a2l(V),
@@ -446,7 +459,7 @@ quote_record_field(V) ->
         true ->
             io_lib:write_string(Chars);
         false ->
-			Chars
+            Chars
     end.
 
 comma_f() ->
@@ -591,11 +604,19 @@ pp_call(MName, FName, Args, Ctx) ->
 pp_call_f(FName, Args, Ctx, PPFun) ->
     beside(pp_call_pos(FName, "", Ctx), pp_args(Args, Ctx, PPFun)).
 
+pp_call_f(MName, FName = {var, Line, _}, Args, Ctx, _PPFun) ->
+    pp_call_dyn_f(MName, FName, Args, Line, Ctx);
+pp_call_f(MName, FName = {var, Line, _, _}, Args, Ctx, _PPFun) ->
+    pp_call_dyn_f(MName, FName, Args, Line, Ctx);
 pp_call_f(MName, FName, Args, Ctx, PPFun) ->
     beside(wrap(dot_f(),
-                pp_call_pos(MName, ":", Ctx),
+                pp_call_method_pos(MName, ":", Ctx),
                 pp_call_pos(FName, "", Ctx)),
            pp_args(Args, Ctx, PPFun)).
+
+pp_call_dyn_f(MName, FName, Args, Line, Ctx) ->
+    ApplyArgs = [MName, FName, list_to_cons(Args, Line)],
+    pp({call, Line, {atom, Line, apply}, ApplyArgs}, Ctx).
 
 pp_call_pos(V = {var, _, _}, _, Ctx) ->
     beside(pp(V, Ctx), text("."));
@@ -604,6 +625,15 @@ pp_call_pos(V = {var, _, _, _}, _, Ctx) ->
 pp_call_pos({atom, _, V}, Prefix, _Ctx) ->
     text(Prefix ++ a2l(V));
 pp_call_pos(V, _, Ctx) ->
+    beside(oparen_f(), beside(pp(V, Ctx), cparen_f())).
+
+pp_call_method_pos(V = {var, _, _}, _, Ctx) ->
+    pp(V, Ctx);
+pp_call_method_pos(V = {var, _, _, _}, _, Ctx) ->
+    pp(V, Ctx);
+pp_call_method_pos({atom, _, V}, Prefix, _Ctx) ->
+    text(Prefix ++ a2l(V));
+pp_call_method_pos(V, _, Ctx) ->
     beside(oparen_f(), beside(pp(V, Ctx), cparen_f())).
 
 pp_args([], _Ctx, _PPFun) ->
@@ -639,6 +669,11 @@ cons_to_list({cons, _, H, T}, []) ->
 cons_to_list({cons, _, H, T}, Accum) ->
     % improper list
     [lists:reverse([H | Accum]) | T].
+
+list_to_cons([], Line) ->
+    {nil, Line};
+list_to_cons([H | T], Line) ->
+    {cons, Line, H, list_to_cons(T, Line)}.
 
 wrap_tuple(Items) ->
     wrap(Items, otuple_f(), ctuple_f()).
@@ -757,7 +792,8 @@ pp_lc_gens(Items, Ctx) ->
     join(Items, Ctx, fun pp_lc_gen/2, comma_f()).
 
 pp_lc_gen({generate, _, Left, Right}, Ctx) ->
-    wrap(text(" <- "), pp(Left, Ctx), pp(Right, Ctx));
+    % TODO: add parens only when statement
+    wrap(text(" <- "), pp(Left, Ctx), wrap_parens(pp(Right, Ctx)));
 pp_lc_gen({b_generate, _, Left, Right}, Ctx) ->
     besidel([text("<< "),
              wrap(text(" <- "), pp(Left, Ctx), pp(Right, Ctx)),
@@ -873,30 +909,21 @@ parse_record_field({record_field, _, {atom, _, Name}, Default}, Pos) ->
     {Name, #{default => Default, position => Pos + 1}}.
 
 pp_rec_new(RecName, Fields, Ctx = #ctxt{}) ->
-    wrap_parens(besidel([p_rec_name(RecName),
-                         text("("),
-                         join(Fields,
-                              Ctx,
-                              fun pp_rec_update_field/2,
-                              comma_f()),
-                         text(")")])).
+    besidel([p_rec_name(RecName),
+             text("("),
+             join(Fields, Ctx, fun pp_rec_update_field/2, comma_f()),
+             text(")")]).
 
 pp_rec_update(RecName, [], CurRecExpr, Ctx = #ctxt{}) ->
     % zero fields record update O.o
-    wrap_parens(besidel([p_rec_name(RecName),
-                         text("("),
-                         pp(CurRecExpr, Ctx),
-                         text(")")]));
+    besidel([p_rec_name(RecName), text("("), pp(CurRecExpr, Ctx), text(")")]);
 pp_rec_update(RecName, Fields, CurRecExpr, Ctx = #ctxt{}) ->
-    wrap_parens(besidel([p_rec_name(RecName),
-                         text("("),
-                         pp(CurRecExpr, Ctx),
-                         text(", "),
-                         join(Fields,
-                              Ctx,
-                              fun pp_rec_update_field/2,
-                              comma_f()),
-                         text(")")])).
+    besidel([p_rec_name(RecName),
+             text("("),
+             pp(CurRecExpr, Ctx),
+             text(", "),
+             join(Fields, Ctx, fun pp_rec_update_field/2, text(", ")),
+             text(")")]).
 
 pp_rec_field(RecExpr, RecName, {atom, _, Field}, Ctx = #ctxt{}) ->
     besidel([p_rec_name(RecName),
@@ -1415,6 +1442,8 @@ should_prefix_erlang_call({record_field, _, _RecExpr, _RecName, _Field},
                           _Arity) ->
     false.
 
+is_ex_reserved_varname("def") ->
+    true;
 is_ex_reserved_varname("if") ->
     true;
 is_ex_reserved_varname("unless") ->
