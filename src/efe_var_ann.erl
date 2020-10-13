@@ -67,10 +67,10 @@ map({'receive', Line, Cs0}, St) ->
     {Cs1, St1} = icr_clauses(Cs0, St),
     {ok, {'receive', Line, Cs1}, St1};
 map({'receive', Line, Cs0, To0, ToEs0}, St) ->
-    {To1, St1} = expr(To0, St),
-    {ToEs1, St2} = exprs(ToEs0, St1),
-    {Cs1, St3} = icr_clauses(Cs0, St2),
-    {ok, {'receive', Line, Cs1, To1, ToEs1}, St3};
+    {To1, _St1} = expr(To0, St),
+    {ToEs1, _St2} = exprs(ToEs0, St),
+    {Cs1, _St3} = icr_clauses(Cs0, St),
+    {ok, {'receive', Line, Cs1, To1, ToEs1}, St};
 map({'try', Line, Es0, Scs0, Ccs0, As0}, St) ->
     {Es1, St1} = exprs(Es0, St),
     {Scs1, St2} = icr_clauses(Scs0, St1),
