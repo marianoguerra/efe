@@ -6,7 +6,7 @@
          update_no_fields_g/1]).
 
 -record(empty, {}).
--record(user, {username = <<"meg">>, age = 25, team=#empty{}}).
+-record(user, {username = <<"meg">>, age = 25, team = #empty{}}).
 -record('Group', {username = <<"meg">>, age = 25, team, 'type-id' = 1}).
 
 new() ->

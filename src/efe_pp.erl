@@ -294,8 +294,10 @@ pp({map, _, Items}, Ctx) ->
     pp_map(Items, Ctx);
 pp({map, _, CurMap, Items}, Ctx) ->
     wrap_map(sep([pp(CurMap, Ctx), pipe(), pp_map_inner(Items, Ctx)]));
-pp({call, _, Expr={'fun', _, _}, Args}, Ctx) ->
-    besidel([wrap_parens(pp(Expr, Ctx)), text("."), pp_args(Args, Ctx, fun pp/2)]);
+pp({call, _, Expr = {'fun', _, _}, Args}, Ctx) ->
+    besidel([wrap_parens(pp(Expr, Ctx)),
+             text("."),
+             pp_args(Args, Ctx, fun pp/2)]);
 pp({call, _, {remote, _, MName, FName}, Args}, Ctx) ->
     pp_call(MName, FName, Args, Ctx);
 pp({call, _, FName, Args}, Ctx) ->
@@ -757,7 +759,8 @@ pp_case_clause({clause, _, [], [], Body}, Ctx) ->
     pp_header_and_body_no_end(Ctx, text(" ->"), Body);
 pp_case_clause({clause, _, Patterns, [], Body}, Ctx) ->
     pp_header_and_body_no_end(Ctx,
-                              besidel([pp_args_inn(Patterns, Ctx), text(" ->")]),
+                              besidel([pp_args_inn(Patterns, Ctx),
+                                       text(" ->")]),
                               Body);
 pp_case_clause({clause, _, Patterns, Guards, Body}, Ctx) ->
     pp_header_and_body_no_end(Ctx,
@@ -817,6 +820,17 @@ pp_bfor(Gens, Ctx, BodyL) ->
     above(sep([text("for"), pp_lc_gens(Gens, Ctx), text(", into: <<>> do")]),
           above(nestc(Ctx, BodyL), text("end"))).
 
+pp_lc_gens([Filter], Ctx)
+    when element(1, Filter) =/= generate andalso
+             element(1, Filter) =/= b_generate ->
+    Line = element(2, Filter),
+    % a filter but no generator, add dummy generator
+    DummyGen =
+        {generate,
+         Line,
+         {var, Line, '_'},
+         {cons, Line, {atom, Line, nil}, {nil, Line}}},
+    pp_lc_gens([DummyGen, Filter], Ctx);
 pp_lc_gens(Items, Ctx) ->
     join(Items, Ctx, fun pp_lc_gen/2, comma_f()).
 
@@ -932,7 +946,8 @@ pp_record_field_decl({record_field, L1, {atom, L2, Name}}, Ctx) ->
                           {atom, L2, Name},
                           {atom, L2, undefined}},
                          Ctx);
-pp_record_field_decl({record_field, _, {atom, _, Name}, {record, _, _, _}}, _Ctx) ->
+pp_record_field_decl({record_field, _, {atom, _, Name}, {record, _, _, _}},
+                     _Ctx) ->
     besidel([text(quote_record_field(Name)), text(": :TODO_NESTED_RECORD")]);
 pp_record_field_decl({record_field, _, {atom, _, Name}, Default}, Ctx) ->
     besidel([text(quote_record_field(Name)), text(": "), pp(Default, Ctx)]).

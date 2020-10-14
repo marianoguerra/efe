@@ -1,6 +1,7 @@
 -module(bincomp).
 
--export([simple/0, bc/0, bc1/0, bsg/0, beam_asm1/2, specifier/1, resolve_inst/4]).
+-export([simple/0, bc/0, bc1/0, bsg/0, beam_asm1/2, specifier/1,
+         resolve_inst/4]).
 
 simple() ->
     [Red || <<Red:2/binary, _Blue:2/binary>> <= <<1, 2, 3, 4, 5, 6, 7, 8>>].
@@ -27,14 +28,18 @@ finalize_fun_table_2(<<>>, _, Acc) ->
 specifier(Bs) ->
     Sz = bit_size(Bs),
     Unused = 8 - bit_size(Bs),
-    <<Bs:Sz/bits,0:Unused>>.
+    <<Bs:Sz/bits, 0:Unused>>.
 
-resolve_inst({bs_match_string=I,[F,Ms,{u,Bits},{u,Off}]},_,Strings,_) ->
-    Len = (Bits+7) div 8,
-    String = if
-		 Len > 0 -> 
-		     <<_:Off/binary,Bin:Len/binary,_/binary>> = Strings,
-		     Bin;
-		 true -> <<>>
-	     end,
-    {test,I,F,[Ms,Bits,String]}.
+resolve_inst({bs_match_string = I, [F, Ms, {u, Bits}, {u, Off}]},
+             _,
+             Strings,
+             _) ->
+    Len = (Bits + 7) div 8,
+    String =
+        if Len > 0 ->
+               <<_:Off/binary, Bin:Len/binary, _/binary>> = Strings,
+               Bin;
+           true ->
+               <<>>
+        end,
+    {test, I, F, [Ms, Bits, String]}.

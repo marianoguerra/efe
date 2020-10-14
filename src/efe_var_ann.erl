@@ -134,7 +134,6 @@ map({function, Line, Name0, Arity0, Clauses0}, St) ->
     {{Name, Arity, Clauses}, _St1} = function(Name0, Arity0, Clauses0, St),
     R = {function, Line, Name, Arity, Clauses},
     {ok, R, St};
-
 % binary types aren't in match position
 map({bin, Line, Fs}, St) ->
     {Fs2, St1} = pattern_grp(Fs, St),
