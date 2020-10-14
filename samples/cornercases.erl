@@ -1,7 +1,7 @@
 -module(cornercases).
 
 -export([varnames/12, atoms/0, chars/0, calls/3, calls/0, long_calc/0,
-         binops/0]).
+         binops/0, instant_call/0, lc_no_gen/0]).
 
 varnames(When, And, Or, Not, In, Fn, Do, End, Catch, Rescue, After, Else) ->
     {When, And, Or, Not, In, Fn, Do, End, Catch, Rescue, After, Else}.
@@ -54,3 +54,15 @@ long_calc() ->
 
 binops() ->
     bnot (1 bsl 2).
+
+instant_call() ->
+    (fun () -> ok end)().
+
+lc_no_gen() ->
+    % elixir for needs a generator, add a dummy `_ <- [nil]` generator
+    {
+     [ok || true],
+     [ok || false],
+     [ok || _ <- [nil], true],
+     [ok || _ <- [nil], false]
+    }.

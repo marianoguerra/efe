@@ -18,7 +18,10 @@ new_state() ->
 set_matching(S = #{never_match := true}) ->
     S;
 set_matching(S) ->
-    S#{matching := true}.
+    set_matching(S, true).
+
+set_matching(S, Matching) ->
+    S#{matching := Matching}.
 
 clear_matching(S) ->
     S#{matching := false}.
@@ -131,6 +134,11 @@ map({function, Line, Name0, Arity0, Clauses0}, St) ->
     {{Name, Arity, Clauses}, _St1} = function(Name0, Arity0, Clauses0, St),
     R = {function, Line, Name, Arity, Clauses},
     {ok, R, St};
+
+% binary types aren't in match position
+map({bin, Line, Fs}, St) ->
+    {Fs2, St1} = pattern_grp(Fs, St),
+    {ok, {bin, Line, Fs2}, St1};
 map(_Ast, _St) ->
     auto.
 
@@ -178,3 +186,29 @@ lc_bc_qual({b_generate, Line, P0, E0}, St, Fn) ->
     {{b_generate, Line, P1, E1}, St2};
 lc_bc_qual(Ast, St, Fn) ->
     ast:expr(Ast, St, Fn).
+
+pattern_grp(Fs, St) ->
+    ast:reduce(Fs, St, fun map/2, fun pattern_grp_item/3).
+
+% bin_element, Line, E1: Pattern, S1: Size, T1: Type Specifier List
+pattern_grp_item({bin_element, L1, E1, S1, T1}, St, Fn) ->
+    #{matching := WasMatching} = St,
+    {S2, St1_0} =
+        case S1 of
+            default ->
+                {default, St};
+            _ ->
+                % disable matching for
+                ast:expr(S1, clear_matching(St), Fn)
+        end,
+
+    St1 = set_matching(St1_0, WasMatching),
+    {T2, St2} =
+        case T1 of
+            default ->
+                {default, St1};
+            _ ->
+                ast:bit_types(T1, St1, Fn)
+        end,
+    {E1_1, St3} = ast:expr(E1, St2, Fn),
+    {{bin_element, L1, E1_1, S2, T2}, St3}.

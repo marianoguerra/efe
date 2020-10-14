@@ -294,6 +294,8 @@ pp({map, _, Items}, Ctx) ->
     pp_map(Items, Ctx);
 pp({map, _, CurMap, Items}, Ctx) ->
     wrap_map(sep([pp(CurMap, Ctx), pipe(), pp_map_inner(Items, Ctx)]));
+pp({call, _, Expr={'fun', _, _}, Args}, Ctx) ->
+    besidel([wrap_parens(pp(Expr, Ctx)), text("."), pp_args(Args, Ctx, fun pp/2)]);
 pp({call, _, {remote, _, MName, FName}, Args}, Ctx) ->
     pp_call(MName, FName, Args, Ctx);
 pp({call, _, FName, Args}, Ctx) ->
@@ -744,16 +746,18 @@ pp_if_clause({clause, _, _, Guards, Body}, Ctx) ->
     pp_header_and_body_no_end(Ctx, pp_if_header(Ctx, "", Guards), Body).
 
 pp_if_header(Ctx, KwT, Guards) ->
-    beside(text(KwT), sep([pp_guards(Guards, Ctx), sarrow_f()])).
+    besidel([text(KwT), pp_guards(Guards, Ctx), text(" ->")]).
 
 pp_case_clauses([Clause], Ctx) ->
     pp_case_clause(Clause, Ctx);
 pp_case_clauses([Clause | Clauses], Ctx) ->
     above(pp_case_clause(Clause, Ctx), pp_case_clauses(Clauses, Ctx)).
 
+pp_case_clause({clause, _, [], [], Body}, Ctx) ->
+    pp_header_and_body_no_end(Ctx, text(" ->"), Body);
 pp_case_clause({clause, _, Patterns, [], Body}, Ctx) ->
     pp_header_and_body_no_end(Ctx,
-                              sep([pp_args_inn(Patterns, Ctx), sarrow_f()]),
+                              besidel([pp_args_inn(Patterns, Ctx), text(" ->")]),
                               Body);
 pp_case_clause({clause, _, Patterns, Guards, Body}, Ctx) ->
     pp_header_and_body_no_end(Ctx,
@@ -928,6 +932,8 @@ pp_record_field_decl({record_field, L1, {atom, L2, Name}}, Ctx) ->
                           {atom, L2, Name},
                           {atom, L2, undefined}},
                          Ctx);
+pp_record_field_decl({record_field, _, {atom, _, Name}, {record, _, _, _}}, _Ctx) ->
+    besidel([text(quote_record_field(Name)), text(": :TODO_NESTED_RECORD")]);
 pp_record_field_decl({record_field, _, {atom, _, Name}, Default}, Ctx) ->
     besidel([text(quote_record_field(Name)), text(": "), pp(Default, Ctx)]).
 
@@ -1472,6 +1478,12 @@ should_prefix_erlang_call({record_field, _, _RecExpr, _RecName, _Field},
                           _Arity) ->
     false.
 
+is_ex_reserved_varname("nil") ->
+    true;
+is_ex_reserved_varname("true") ->
+    true;
+is_ex_reserved_varname("false") ->
+    true;
 is_ex_reserved_varname("def") ->
     true;
 is_ex_reserved_varname("if") ->
