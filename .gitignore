@@ -19,3 +19,5 @@ rebar3.crashdump
 *~
 out
 .tool-versions
+efe
+otplib
