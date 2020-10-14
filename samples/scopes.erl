@@ -4,7 +4,7 @@
          receive_match/0, try_match/0, fun_scope/0, named_fun_scope/0,
          lc_scope/0, case_expr_not_matching/0, vars_in_clauses/1,
          var_in_prev_fun/1, var_in_prev_fun1/1, match_in_head/2, if_clauses/1,
-         try_stacktrace/1]).
+         try_stacktrace/1, new_var_in_match/1]).
 
 -record(user, {username = <<"meg">>}).
 
@@ -158,3 +158,7 @@ try_stacktrace(F) ->
         T:E ->
             {T, E}
     end.
+
+new_var_in_match(A) ->
+    % second shouldn't match, var defined in pattern
+    {Same, Same} = {1, A}.

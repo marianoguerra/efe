@@ -3,15 +3,9 @@
 -export([do/1]).
 -export([map/2]).
 
-new_scope() ->
-    new_scope(#{}).
-
-new_scope(Vars) ->
-    #{vars => Vars}.
-
 new_state() ->
-    #{scope => new_scope(),
-      scopes => [],
+    #{vars => #{},
+      vars_in_match => #{},
       matching => false,
       never_match => false}.
 
@@ -23,8 +17,10 @@ set_matching(S) ->
 set_matching(S, Matching) ->
     S#{matching := Matching}.
 
-clear_matching(S) ->
-    S#{matching := false}.
+clear_matching(S = #{vars_in_match := VarsInMatch, vars := Vars}) ->
+    % VarsInMatch first to override vars that weren't new (shouldn't happen)
+    NewVars = maps:merge(VarsInMatch, Vars),
+    S#{matching := false, vars_in_match := #{}, vars := NewVars}.
 
 set_never_match(S) ->
     S#{never_match := true}.
@@ -33,21 +29,34 @@ clear_never_match(S) ->
     S#{never_match := false}.
 
 % http://icai.ektf.hu/pdf/ICAI2007-vol2-pp137-145.pdf
-enter_scope(S = #{scope := Scope = #{vars := Vars}, scopes := Scopes}) ->
-    S#{scope := new_scope(Vars), scopes := [Scope | Scopes]}.
 
 add_var_if_not_there(S, _Line, '_') ->
     S;
-add_var_if_not_there(S = #{scope := Scope = #{vars := Vars}}, Line, Name) ->
+add_var_if_not_there(S =
+                         #{matching := true,
+                           vars_in_match := VarsInMatch,
+                           vars := Vars},
+                     Line,
+                     Name) ->
+    % while matching add new vars in different map, when clear_matching is called
+    % we merge them in vars
+    case maps:get(Name, Vars, nil) of
+        nil ->
+            NewVars = VarsInMatch#{Name => #{line => Line}},
+            S#{vars_in_match := NewVars};
+        _ ->
+            S
+    end;
+add_var_if_not_there(S = #{vars := Vars}, Line, Name) ->
     case maps:get(Name, Vars, nil) of
         nil ->
             NewVars = Vars#{Name => #{line => Line}},
-            S#{scope => Scope#{vars := NewVars}};
+            S#{vars := NewVars};
         _ ->
             S
     end.
 
-get_var(#{scope := #{vars := Vars}}, Name) ->
+get_var(#{vars := Vars}, Name) ->
     maps:get(Name, Vars, nil).
 
 do(Ast) ->
@@ -176,13 +185,13 @@ lc_bc_quals(Qs, St) ->
     ast:reduce(Qs, St, fun map/2, fun lc_bc_qual/3).
 
 lc_bc_qual({generate, Line, P0, E0}, St, Fn) ->
-    {E1, St1} = ast:expr(E0, enter_scope(St), Fn),
-    {P1, St2} = ast:pattern(P0, St1, Fn),
-    {{generate, Line, P1, E1}, St2};
+    {E1, St1} = ast:expr(E0, St, Fn),
+    {P1, _St2} = ast:pattern(P0, St1, Fn),
+    {{generate, Line, P1, E1}, St};
 lc_bc_qual({b_generate, Line, P0, E0}, St, Fn) ->
     {E1, St1} = ast:expr(E0, St, Fn),
-    {P1, St2} = ast:pattern(P0, St1, Fn),
-    {{b_generate, Line, P1, E1}, St2};
+    {P1, _St2} = ast:pattern(P0, St1, Fn),
+    {{b_generate, Line, P1, E1}, St};
 lc_bc_qual(Ast, St, Fn) ->
     ast:expr(Ast, St, Fn).
 

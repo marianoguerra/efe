@@ -240,8 +240,10 @@ pp({char, _, $\b}, _Ctx) ->
     text("?\\b");
 pp({char, _, $\v}, _Ctx) ->
     text("?\\v");
-pp({char, _, $\a}, _Ctx) ->
+pp({char, _, $\^G}, _Ctx) ->
     text("?\\a");
+pp({char, _, $\^C}, _Ctx) ->
+    text("3");
 pp({char, _, V}, _Ctx) ->
     text("?" ++ [V]);
 %% TODO: record
@@ -651,7 +653,14 @@ pp_call_pos(V = {var, _, _}, _, Ctx) ->
 pp_call_pos(V = {var, _, _, _}, _, Ctx) ->
     beside(pp(V, Ctx), text("."));
 pp_call_pos({atom, _, V}, Prefix, _Ctx) ->
-    text(Prefix ++ a2l(V));
+    Name =
+        case a2l(V) of
+            L = [H | _] when not (H >= $a andalso H =< $z) ->
+                io_lib:write_string(L, $');
+            L ->
+                L
+        end,
+    text(Prefix ++ Name);
 pp_call_pos(V, _, Ctx) ->
     beside(oparen_f(), beside(pp(V, Ctx), cparen_f())).
 
