@@ -44,6 +44,7 @@
          exports = #{},
          records = #{},
          record_imported = false,
+         stacktrace_varname = nil,
          break_indent = 4 :: non_neg_integer(),
          paper = ?PAPER :: integer(),
          ribbon = ?RIBBON :: integer()}).
@@ -67,6 +68,12 @@ set_prec(Ctxt, Prec) ->
 
 reset_prec(Ctxt) ->
     set_prec(Ctxt, 0).    % used internally
+
+% don't set it if not explicitly set
+set_stacktrace_var(Ctx, '_') ->
+    Ctx;
+set_stacktrace_var(Ctx, STraceVarName) ->
+    Ctx#ctxt{stacktrace_varname = STraceVarName}.
 
 pp_mod([], _Ctx) ->
     empty();
@@ -111,11 +118,16 @@ pp({attribute, _, type, _}, _Ctx) ->
 pp({attribute, _, opaque, _}, _Ctx) ->
     empty();
 pp({attribute, _, record, {RecName, []}}, _Ctx) ->
-    besidel([text("Record.defrecord(:"), p_rec_name(RecName), text(", "), quote_atom(RecName), text(")")]);
+    besidel([text("Record.defrecord(:"),
+             p_rec_name(RecName),
+             text(", "),
+             quote_atom(RecName),
+             text(")")]);
 pp({attribute, _, record, {RecName, Fields}}, Ctx) ->
     besidel([text("Record.defrecord(:"),
              p_rec_name(RecName),
-             text(", "), quote_atom(RecName),
+             text(", "),
+             quote_atom(RecName),
              text(", "),
              join(Fields, Ctx, fun pp_record_field_decl/2, comma_f()),
              text(")")]);
@@ -184,6 +196,10 @@ pp({attribute, _, compile, export_all}, _Ctx) ->
     text("@compile :export_all");
 pp({attribute, _, compile, _}, _Ctx) ->
     empty();
+pp({var, _, V}, #ctxt{stacktrace_varname = V}) ->
+    text("__STACKTRACE__");
+pp({var, _, V, _}, #ctxt{stacktrace_varname = V}) ->
+    text("__STACKTRACE__");
 pp({var, _, V, #{new := false, matching := true}}, #ctxt{}) ->
     text("^" ++ transform_var_name(V));
 pp({var, _, V, _}, _Ctx) ->
@@ -764,12 +780,14 @@ pp_try_catch_cases([H | T], Ctx) ->
     above(pp_try_catch_case(H, Ctx), pp_try_catch_cases(T, Ctx)).
 
 pp_try_catch_case({clause, _, [{tuple, _, TItems}], [], Body}, Ctx) ->
-    pp_header_and_body_no_end(Ctx,
+    Ctx1 = maybe_set_catch_stacktrace_var(Ctx, TItems),
+    pp_header_and_body_no_end(Ctx1,
                               sep([pp_try_catch_case_items(TItems, Ctx),
                                    sarrow_f()]),
                               Body);
 pp_try_catch_case({clause, _, [{tuple, _, TItems}], Guards, Body}, Ctx) ->
-    pp_header_and_body_no_end(Ctx,
+    Ctx1 = maybe_set_catch_stacktrace_var(Ctx, TItems),
+    pp_header_and_body_no_end(Ctx1,
                               followc(Ctx,
                                       pp_try_catch_case_items(TItems, Ctx),
                                       beside(text("when "),
@@ -777,16 +795,15 @@ pp_try_catch_case({clause, _, [{tuple, _, TItems}], Guards, Body}, Ctx) ->
                                                   sarrow_f()]))),
                               Body).
 
-pp_try_catch_case_items([{atom, _, throw}, Var, {var, _, '_'}], Ctx) ->
+pp_try_catch_case_items([{atom, _, throw}, Var, _], Ctx) ->
     pp(Var, Ctx);
-pp_try_catch_case_items([{atom, _, throw}, Var, {var, _, '_', _}], Ctx) ->
-    pp(Var, Ctx);
-pp_try_catch_case_items([Type, Var, {var, _, '_'}], Ctx) ->
-    pp_items([Type, Var], Ctx);
-pp_try_catch_case_items([Type, Var, {var, _, '_', _}], Ctx) ->
-    pp_items([Type, Var], Ctx);
-pp_try_catch_case_items([Type, Var, StackTrace], Ctx) ->
-    pp_items([Type, Var, StackTrace], Ctx).
+pp_try_catch_case_items([Type, Var, _], Ctx) ->
+    pp_items([Type, Var], Ctx).
+
+maybe_set_catch_stacktrace_var(Ctx, [_, _, {var, _, Name}]) ->
+    set_stacktrace_var(Ctx, Name);
+maybe_set_catch_stacktrace_var(Ctx, [_, _, {var, _, Name, _}]) ->
+    set_stacktrace_var(Ctx, Name).
 
 pp_for(Gens, Ctx, BodyL) ->
     above(besidel([text("for "), pp_lc_gens(Gens, Ctx), text(" do")]),

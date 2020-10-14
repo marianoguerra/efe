@@ -3,7 +3,8 @@
 -export([noop/0, simple_scope/0, other_scope/1, multi_clause/1, case_match/0,
          receive_match/0, try_match/0, fun_scope/0, named_fun_scope/0,
          lc_scope/0, case_expr_not_matching/0, vars_in_clauses/1,
-         var_in_prev_fun/1, var_in_prev_fun1/1, match_in_head/2, if_clauses/1]).
+         var_in_prev_fun/1, var_in_prev_fun1/1, match_in_head/2, if_clauses/1,
+         try_stacktrace/1]).
 
 -record(user, {username = <<"meg">>}).
 
@@ -144,4 +145,16 @@ if_clauses(A) ->
        true ->
            B = 2, % shouldn't match
            B + 2
+    end.
+
+try_stacktrace(F) ->
+    try
+        F()
+    catch
+        T:(E = asd):S ->
+            {T, E, S};
+        E ->
+            E;
+        T:E ->
+            {T, E}
     end.
