@@ -111,10 +111,11 @@ pp({attribute, _, type, _}, _Ctx) ->
 pp({attribute, _, opaque, _}, _Ctx) ->
     empty();
 pp({attribute, _, record, {RecName, []}}, _Ctx) ->
-    besidel([text("Record.defrecord("), quote_atom(RecName), text(")")]);
+    besidel([text("Record.defrecord(:"), p_rec_name(RecName), text(", "), quote_atom(RecName), text(")")]);
 pp({attribute, _, record, {RecName, Fields}}, Ctx) ->
-    besidel([text("Record.defrecord("),
-             quote_atom(RecName),
+    besidel([text("Record.defrecord(:"),
+             p_rec_name(RecName),
+             text(", "), quote_atom(RecName),
              text(", "),
              join(Fields, Ctx, fun pp_record_field_decl/2, comma_f()),
              text(")")]);
@@ -223,6 +224,8 @@ pp({char, _, $\b}, _Ctx) ->
     text("?\\b");
 pp({char, _, $\v}, _Ctx) ->
     text("?\\v");
+pp({char, _, $\a}, _Ctx) ->
+    text("?\\a");
 pp({char, _, V}, _Ctx) ->
     text("?" ++ [V]);
 %% TODO: record
@@ -1516,9 +1519,5 @@ op_to_erlang_call(Line, Op, Args, Ctx) ->
        Ctx).
 
 p_rec_name(RecName) ->
-    case a2l(RecName) of
-        Name = [H | _] when H >= $A andalso H =< $Z ->
-            text([":" | Name]);
-        Name ->
-            text(Name)
-    end.
+    Name = a2l(RecName),
+    text(["r_" | Name]).
