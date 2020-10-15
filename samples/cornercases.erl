@@ -1,7 +1,7 @@
 -module(cornercases).
 
 -export([varnames/12, atoms/0, chars/0, calls/3, calls/0, long_calc/0, binops/0,
-         instant_call/0, lc_no_gen/0, module_macro/0, uppercase_funs/2]).
+         instant_call/0, lc_no_gen/0, module_macro/0, uppercase_funs/2, fun_no_args_when/1]).
 
 varnames(When, And, Or, Not, In, Fn, Do, End, Catch, Rescue, After, Else) ->
     {When, And, Or, Not, In, Fn, Do, End, Catch, Rescue, After, Else}.
@@ -72,3 +72,8 @@ module_macro() ->
 
 uppercase_funs(A, B) ->
     wxMenu:'Destroy'(A, B).
+
+fun_no_args_when(A) ->
+    {fun () when A =:= 10 -> ok end,
+     fun() -> ok end,
+     fun (B) -> B end}.

@@ -4,7 +4,7 @@
          update_fields/1, update_no_fields/1]).
 -export([new_g/0, new_g/2, get_field_g/1, get_field_index_g/0, update_field_g/1,
          update_no_fields_g/1]).
--export([quote_record/0]).
+-export([quote_record/0, record_info_fn/0]).
 
 -record(empty, {}).
 -record(user, {username = <<"meg">>, age = 25, team = #empty{}}).
@@ -17,6 +17,10 @@ quote_record() ->
 
 new() ->
     #user{}.
+
+record_info_fn() ->
+    {record_info(fields, user), 
+     record_info(size, user)}.
 
 new(Username, Age) ->
     #user{username = Username, age = Age}.

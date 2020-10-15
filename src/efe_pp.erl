@@ -247,7 +247,6 @@ pp({char, _, $\^C}, _Ctx) ->
     text("3");
 pp({char, _, V}, _Ctx) ->
     text("?" ++ [V]);
-%% TODO: record
 pp({record, _, RecName, Fields}, Ctx) ->
     pp_rec_new(RecName, Fields, Ctx);
 pp({record, _, CurRecExpr, RecName, Fields}, Ctx) ->
@@ -297,6 +296,17 @@ pp({map, _, Items}, Ctx) ->
     pp_map(Items, Ctx);
 pp({map, _, CurMap, Items}, Ctx) ->
     wrap_map(sep([pp(CurMap, Ctx), pipe(), pp_map_inner(Items, Ctx)]));
+
+% record_info expansion
+pp({call, _, {atom, _, record_info}, [{atom, _, fields}, {atom, _, RecName}]}, _Ctx) ->
+    besidel([text("Keyword.keys("), p_rec_name(RecName), text("("),
+             p_rec_name(RecName), text("()))")
+            ]);
+pp({call, _, {atom, _, record_info}, [{atom, _, size}, {atom, _, RecName}]}, _Ctx) ->
+        besidel([text("length("), p_rec_name(RecName), text("("),
+                 p_rec_name(RecName), text("()))")
+                ]);
+
 pp({call, _, Expr = {'fun', _, _}, Args}, Ctx) ->
     besidel([wrap_parens(pp(Expr, Ctx)),
              text("."),
@@ -305,8 +315,11 @@ pp({call, _, {remote, _, MName, FName}, Args}, Ctx) ->
     pp_call(MName, FName, Args, Ctx);
 pp({call, _, FName, Args}, Ctx) ->
     pp_call(FName, Args, Ctx);
+pp({'fun', _, {clauses, Clauses=[{clause, _, [], [_ | _], _}]}}, Ctx) ->
+    above(beside(text("fn ()"), pp_case_clauses(Clauses, Ctx)),
+          text("end"));
 pp({'fun', _, {clauses, Clauses}}, Ctx) ->
-    above(sep([text("fn"), nestc(Ctx, pp_case_clauses(Clauses, Ctx))]),
+    above(beside(text("fn "), pp_case_clauses(Clauses, Ctx)),
           text("end"));
 pp({named_fun, _, AName, Clauses}, Ctx) ->
     above(sep([text("fn " ++ transform_var_name(AName)),
