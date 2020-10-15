@@ -78,8 +78,9 @@ set_stacktrace_var(Ctx, STraceVarName) ->
 pp_mod([], _Ctx) ->
     empty();
 pp_mod([{attribute, _, module, ModName} | Nodes], Ctx) ->
-    above(text("defmodule :m_" ++ a2l(ModName) ++ " do"),
-          above(nestc(Ctx, pp_mod(Nodes, Ctx)), text("end")));
+        abovel([text("defmodule :m_" ++ a2l(ModName) ++ " do"),
+                nestc(Ctx, above(text("use Bitwise"), pp_mod(Nodes, Ctx))),
+                text("end")]);
 pp_mod([Node = {attribute, _, record, {RecName, Fields}} | Nodes], Ctx) ->
     Ctx1 = add_record_declaration(RecName, Fields, Ctx),
     {Ctx2, Cont} =
@@ -122,7 +123,7 @@ pp({attribute, _, record, {RecName, []}}, _Ctx) ->
              p_rec_name(RecName),
              text(", "),
              quote_atom(RecName),
-             text(")")]);
+             text(", efe_DUMMY_FIELD_EMPTY_RECORD: :undefined)")]);
 pp({attribute, _, record, {RecName, Fields}}, Ctx) ->
     besidel([text("Record.defrecord(:"),
              p_rec_name(RecName),
@@ -474,12 +475,14 @@ gen_attr(Attr, V) when is_list(V) ->
     text("@" ++ a2l(Attr) ++ " " ++ io_lib:write_string(V)).
 
 quote_atom_raw(V) ->
-    Chars = a2l(V),
+    [":" | maybe_quote_atom_str(a2l(V))].
+
+maybe_quote_atom_str(Chars) ->
     case re:run(Chars, "^[a-zA-Z_][a-zA-Z0-9@_]*$") of
         nomatch ->
-            [":" | io_lib:write_string(Chars)];
+            io_lib:write_string(Chars);
         {match, _} ->
-            [":" | Chars]
+            Chars
     end.
 
 quote_record_field(V) ->
@@ -601,18 +604,18 @@ pp_fn_ref({FNameAtom, Arity}, _Ctx) ->
 pp_fn_import_ref({FNameAtom, Arity}, _Ctx) ->
     text("" ++ a2l(FNameAtom) ++ ": " ++ arity_to_list(Arity)).
 
-pp_fn_deprecated_ref({FName, Arity, When}, _Ctx) when is_atom(When) ->
-    text("(" ++
-             a2l(FName) ++
-                 ", " ++ arity_to_list(Arity) ++ ", " ++ a2l(When) ++ ")");
-pp_fn_deprecated_ref({FName, Arity, Msg}, _Ctx) when is_list(Msg) ->
-    text("(" ++
-             a2l(FName) ++
-                 ", " ++
-                     arity_to_list(Arity) ++
-                         ", " ++ io_lib:write_string(Msg) ++ ")");
-pp_fn_deprecated_ref(FnRef, Ctx) ->
-    pp_fn_ref(FnRef, Ctx).
+%pp_fn_deprecated_ref({FName, Arity, When}, _Ctx) when is_atom(When) ->
+%    text("(" ++
+%             a2l(FName) ++
+%                 ", " ++ arity_to_list(Arity) ++ ", " ++ a2l(When) ++ ")");
+%pp_fn_deprecated_ref({FName, Arity, Msg}, _Ctx) when is_list(Msg) ->
+%    text("(" ++
+%             a2l(FName) ++
+%                 ", " ++
+%                     arity_to_list(Arity) ++
+%                         ", " ++ io_lib:write_string(Msg) ++ ")");
+%pp_fn_deprecated_ref(FnRef, Ctx) ->
+%    pp_fn_ref(FnRef, Ctx).
 
 arity_to_list('_') ->
     ":_";
@@ -1068,18 +1071,12 @@ is_erlang_op('or') ->
     true;
 is_erlang_op('xor') ->
     true;
-is_erlang_op('bor') ->
-    true;
-is_erlang_op('band') ->
-    true;
-is_erlang_op('bxor') ->
-    true;
-is_erlang_op('bsr') ->
-    true;
-is_erlang_op('bsl') ->
-    true;
-is_erlang_op('bnot') ->
-    true;
+% is_erlang_op('bor') -> true;
+% is_erlang_op('band') -> true;
+% is_erlang_op('bxor') -> true;
+% is_erlang_op('bsr') -> true;
+% is_erlang_op('bsl') -> true;
+% is_erlang_op('bnot') -> true;
 is_erlang_op(_) ->
     false.
 
@@ -1573,4 +1570,4 @@ op_to_erlang_call(Line, Op, Args, Ctx) ->
 
 p_rec_name(RecName) ->
     Name = a2l(RecName),
-    text(["r_" | Name]).
+    text(string:replace(["r_" | Name], "-", "_", all)).
