@@ -78,9 +78,9 @@ set_stacktrace_var(Ctx, STraceVarName) ->
 pp_mod([], _Ctx) ->
     empty();
 pp_mod([{attribute, _, module, ModName} | Nodes], Ctx) ->
-        abovel([text("defmodule :m_" ++ a2l(ModName) ++ " do"),
-                nestc(Ctx, above(text("use Bitwise"), pp_mod(Nodes, Ctx))),
-                text("end")]);
+    abovel([text("defmodule :m_" ++ a2l(ModName) ++ " do"),
+            nestc(Ctx, above(text("use Bitwise"), pp_mod(Nodes, Ctx))),
+            text("end")]);
 pp_mod([Node = {attribute, _, record, {RecName, Fields}} | Nodes], Ctx) ->
     Ctx1 = add_record_declaration(RecName, Fields, Ctx),
     {Ctx2, Cont} =
@@ -296,30 +296,31 @@ pp({map, _, Items}, Ctx) ->
     pp_map(Items, Ctx);
 pp({map, _, CurMap, Items}, Ctx) ->
     wrap_map(sep([pp(CurMap, Ctx), pipe(), pp_map_inner(Items, Ctx)]));
-
 % record_info expansion
-pp({call, _, {atom, _, record_info}, [{atom, _, fields}, {atom, _, RecName}]}, _Ctx) ->
-    besidel([text("Keyword.keys("), p_rec_name(RecName), text("("),
-             p_rec_name(RecName), text("()))")
-            ]);
-pp({call, _, {atom, _, record_info}, [{atom, _, size}, {atom, _, RecName}]}, _Ctx) ->
-        besidel([text("length("), p_rec_name(RecName), text("("),
-                 p_rec_name(RecName), text("()))")
-                ]);
-
+pp({call, _, {atom, _, record_info}, [{atom, _, fields}, {atom, _, RecName}]},
+   _Ctx) ->
+    besidel([text("Keyword.keys("),
+             p_rec_name(RecName),
+             text("("),
+             p_rec_name(RecName),
+             text("()))")]);
+pp({call, _, {atom, _, record_info}, [{atom, _, size}, {atom, _, RecName}]},
+   _Ctx) ->
+    besidel([text("length("),
+             p_rec_name(RecName),
+             text("("),
+             p_rec_name(RecName),
+             text("()))")]);
+pp({call, _, Expr = {call, _, _, _}, Args}, Ctx) ->
+    wrap_call(Expr, Args, Ctx);
 pp({call, _, Expr = {'fun', _, _}, Args}, Ctx) ->
-    besidel([wrap_parens(pp(Expr, Ctx)),
-             text("."),
-             pp_args(Args, Ctx, fun pp/2)]);
+    wrap_call(Expr, Args, Ctx);
 pp({call, _, {remote, _, MName, FName}, Args}, Ctx) ->
     pp_call(MName, FName, Args, Ctx);
 pp({call, _, FName, Args}, Ctx) ->
     pp_call(FName, Args, Ctx);
-pp({'fun', _, {clauses, Clauses=[{clause, _, [], [_ | _], _}]}}, Ctx) ->
-    above(beside(text("fn ()"), pp_case_clauses(Clauses, Ctx)),
-          text("end"));
 pp({'fun', _, {clauses, Clauses}}, Ctx) ->
-    above(beside(text("fn "), pp_case_clauses(Clauses, Ctx)),
+    above(beside(text("fn "), pp_case_clauses(Clauses, Ctx, "()")),
           text("end"));
 pp({named_fun, _, AName, Clauses}, Ctx) ->
     above(sep([text("fn " ++ transform_var_name(AName)),
@@ -647,6 +648,11 @@ pp_call(FName, Args, Ctx) ->
 pp_call(MName, FName, Args, Ctx) ->
     pp_call_f(MName, FName, Args, Ctx, fun pp/2).
 
+wrap_call(Expr, Args, Ctx) ->
+    besidel([wrap_parens(pp(Expr, Ctx)),
+             text("."),
+             pp_args(Args, Ctx, fun pp/2)]).
+
 pp_call_f(FName, Args, Ctx, PPFun) ->
     beside(pp_call_pos(FName, "", Ctx), pp_args(Args, Ctx, PPFun)).
 
@@ -775,19 +781,28 @@ pp_if_clause({clause, _, _, Guards, Body}, Ctx) ->
 pp_if_header(Ctx, KwT, Guards) ->
     besidel([text(KwT), pp_guards(Guards, Ctx), text(" ->")]).
 
-pp_case_clauses([Clause], Ctx) ->
-    pp_case_clause(Clause, Ctx);
-pp_case_clauses([Clause | Clauses], Ctx) ->
-    above(pp_case_clause(Clause, Ctx), pp_case_clauses(Clauses, Ctx)).
+pp_case_clauses(Clause, Ctx) ->
+    pp_case_clauses(Clause, Ctx, "").
 
-pp_case_clause({clause, _, [], [], Body}, Ctx) ->
-    pp_header_and_body_no_end(Ctx, text(" ->"), Body);
-pp_case_clause({clause, _, Patterns, [], Body}, Ctx) ->
+pp_case_clauses([Clause], Ctx, EmptyArgsTxt) ->
+    pp_case_clause(Clause, Ctx, EmptyArgsTxt);
+pp_case_clauses([Clause | Clauses], Ctx, EmptyArgsTxt) ->
+    above(pp_case_clause(Clause, Ctx, EmptyArgsTxt),
+          pp_case_clauses(Clauses, Ctx, EmptyArgsTxt)).
+
+pp_case_clause({clause, _, [], [], Body}, Ctx, EmptyArgsTxt) ->
+    pp_header_and_body_no_end(Ctx, text(EmptyArgsTxt ++ " ->"), Body);
+pp_case_clause({clause, _, Patterns, [], Body}, Ctx, _EmptyArgsTxt) ->
     pp_header_and_body_no_end(Ctx,
                               besidel([pp_args_inn(Patterns, Ctx),
                                        text(" ->")]),
                               Body);
-pp_case_clause({clause, _, Patterns, Guards, Body}, Ctx) ->
+pp_case_clause({clause, _, [], Guards, Body}, Ctx, EmptyArgsTxt) ->
+    pp_header_and_body_no_end(Ctx,
+                              beside(text(EmptyArgsTxt ++ " when "),
+                                     sep([pp_guards(Guards, Ctx), sarrow_f()])),
+                              Body);
+pp_case_clause({clause, _, Patterns, Guards, Body}, Ctx, _EmptyArgsTxt) ->
     pp_header_and_body_no_end(Ctx,
                               followc(Ctx,
                                       pp_args_inn(Patterns, Ctx),

@@ -19,8 +19,7 @@ new() ->
     #user{}.
 
 record_info_fn() ->
-    {record_info(fields, user), 
-     record_info(size, user)}.
+    {record_info(fields, user), record_info(size, user)}.
 
 new(Username, Age) ->
     #user{username = Username, age = Age}.
