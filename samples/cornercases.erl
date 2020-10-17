@@ -2,16 +2,14 @@
 
 -export([varnames/12, atoms/0, chars/0, calls/3, calls/0, long_calc/0, binops/0,
          instant_call/0, lc_no_gen/0, module_macro/0, uppercase_funs/2,
-         fun_no_args_when/1, 'substring-after'/0, call_call/0]).
+         fun_no_args_when/1, 'substring-after'/0, call_call/0,
+         escape_str_interpolation/0, printable_chars/0]).
 
 varnames(When, And, Or, Not, In, Fn, Do, End, Catch, Rescue, After, Else) ->
     {When, And, Or, Not, In, Fn, Do, End, Catch, Rescue, After, Else}.
 
 atoms() ->
     ['type-id'].
-
-chars() ->
-    [$\s, $\t, $\r, $\n, $\f, $\e, $\d, $\b, $\v, $\^G, $\^C].
 
 calls(M, F, Arity) ->
     {F(),
@@ -98,3 +96,12 @@ return_fn() ->
 
 call_call() ->
     (return_fn())().
+
+escape_str_interpolation() ->
+    ["#{", '#{', "'p'"].
+
+chars() ->
+    [$\s, $\t, $\r, $\n, $\f, $\e, $\d, $\b, $\v, $\^G, $\^C].
+
+printable_chars() ->
+    [$a, $z, $A, $Z, $0, $9, $\000, $\377, $\\, $\n].

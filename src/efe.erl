@@ -49,7 +49,8 @@ annotate(Path) ->
              end).
 
 from_erl(Path) ->
-    epp:parse_file(Path, [], []).
+    IncludePath = filename:join([filename:dirname(Path), "../include/"]),
+    epp:parse_file(Path, [IncludePath], []).
 
 pprint_ex(Path, DoPrint) ->
     case from_erl(Path) of

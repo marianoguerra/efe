@@ -63,10 +63,13 @@ do(Ast) ->
     ast:map(Ast, new_state(), fun map/2).
 
 map({match, Line, Left, Right}, St) ->
-    {Left1, St1} = expr(Left, set_matching(St)),
-    {Right1, _} = expr(Right, St),
+    % evaluate right before left, vars on right should already exist,
+    % it should not see vars that are new on left side
+    % see scopes:match_left_var_not_on_right_side/0
+    {Right1, St1} = expr(Right, St),
+    {Left1, St2} = expr(Left, set_matching(St1)),
     R = {match, Line, Left1, Right1},
-    {ok, R, clear_matching(St1)};
+    {ok, R, clear_matching(St2)};
 % if doesn't match on head?
 map({'if', Line, Cs0}, St) ->
     {Cs1, St1} = icr_clauses(Cs0, St),
@@ -185,14 +188,15 @@ lc_bc_quals(Qs, St) ->
     ast:reduce(Qs, St, fun map/2, fun lc_bc_qual/3).
 
 lc_bc_qual({generate, Line, P0, E0}, St, Fn) ->
-    {E1, St1} = ast:expr(E0, St, Fn),
-    {P1, _St2} = ast:pattern(P0, St1, Fn),
-    {{generate, Line, P1, E1}, St};
+    {E1, _St1} = ast:expr(E0, St, Fn),
+    {P1, St2} = ast:pattern(P0, set_matching(St), Fn),
+    {{generate, Line, P1, E1}, clear_matching(St2)};
 lc_bc_qual({b_generate, Line, P0, E0}, St, Fn) ->
-    {E1, St1} = ast:expr(E0, St, Fn),
-    {P1, _St2} = ast:pattern(P0, St1, Fn),
-    {{b_generate, Line, P1, E1}, St};
+    {E1, _St1} = ast:expr(E0, St, Fn),
+    {P1, St2} = ast:pattern(P0, set_matching(St), Fn),
+    {{b_generate, Line, P1, E1}, clear_matching(St2)};
 lc_bc_qual(Ast, St, Fn) ->
+    % filter
     ast:expr(Ast, St, Fn).
 
 pattern_grp(Fs, St) ->

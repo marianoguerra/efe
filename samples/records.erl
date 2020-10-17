@@ -4,12 +4,13 @@
          update_fields/1, update_no_fields/1]).
 -export([new_g/0, new_g/2, get_field_g/1, get_field_index_g/0, update_field_g/1,
          update_no_fields_g/1]).
--export([quote_record/0, record_info_fn/0]).
+-export([quote_record/0, record_info_fn/0, record_call/0]).
 
 -record(empty, {}).
 -record(user, {username = <<"meg">>, age = 25, team = #empty{}}).
 -record('Group', {username = <<"meg">>, age = 25, team, 'type-id' = 1}).
 -record('A-B-c', {a = 1}).
+-record(state, {function}).
 
 quote_record() ->
     R = #'A-B-c'{},
@@ -63,3 +64,11 @@ update_field_g(Usr = #'Group'{}) ->
 
 update_no_fields_g(Usr) ->
     Usr#'Group'{}.
+
+record_call() ->
+    R =
+        #state{function =
+                   fun () ->
+                           ok
+                   end},
+    (R#state.function)().

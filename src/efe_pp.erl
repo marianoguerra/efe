@@ -220,9 +220,9 @@ pp({integer, _, Num}, _Ctx) ->
 pp({float, _, Num}, _Ctx) ->
     text(io_lib:write(Num));
 pp({string, _, V}, _Ctx) ->
-    text(io_lib:write_string(V, $'));
+    quote_string(V, $');
 pp({bin, _, [{bin_element, _, {string, _, V}, default, default}]}, _Ctx) ->
-    text(io_lib:write_string(V));
+    quote_string(V, $");
 pp({char, _, $\s}, _Ctx) ->
     text("?\\s");
 pp({char, _, $\r}, _Ctx) ->
@@ -241,12 +241,16 @@ pp({char, _, $\b}, _Ctx) ->
     text("?\\b");
 pp({char, _, $\v}, _Ctx) ->
     text("?\\v");
+pp({char, _, $\\}, _Ctx) ->
+    text("?\\\\");
 pp({char, _, $\^G}, _Ctx) ->
     text("?\\a");
 pp({char, _, $\^C}, _Ctx) ->
     text("3");
-pp({char, _, V}, _Ctx) ->
+pp({char, _, V}, _Ctx) when V >= 32 andalso V =< 127 ->
     text("?" ++ [V]);
+pp({char, _, V}, _Ctx) ->
+   text(format_non_printable_char(V));
 pp({record, _, RecName, Fields}, Ctx) ->
     pp_rec_new(RecName, Fields, Ctx);
 pp({record, _, CurRecExpr, RecName, Fields}, Ctx) ->
@@ -314,6 +318,8 @@ pp({call, _, {atom, _, record_info}, [{atom, _, size}, {atom, _, RecName}]},
 pp({call, _, Expr = {call, _, _, _}, Args}, Ctx) ->
     wrap_call(Expr, Args, Ctx);
 pp({call, _, Expr = {'fun', _, _}, Args}, Ctx) ->
+    wrap_call(Expr, Args, Ctx);
+pp({call, _, Expr = {record_field, _, _, _, _}, Args}, Ctx) ->
     wrap_call(Expr, Args, Ctx);
 pp({call, _, {remote, _, MName, FName}, Args}, Ctx) ->
     pp_call(MName, FName, Args, Ctx);
@@ -486,15 +492,27 @@ pp_attr_fun_list(Prefix, Funs, Ctx) ->
 gen_attr(Attr, V) when is_atom(V) ->
     text("@" ++ a2l(Attr) ++ " " ++ quote_atom_raw(V));
 gen_attr(Attr, V) when is_list(V) ->
-    text("@" ++ a2l(Attr) ++ " " ++ io_lib:write_string(V)).
+    text("@" ++ a2l(Attr) ++ " " ++ quote_string_raw(V)).
 
 quote_atom_raw(V) ->
     [":" | maybe_quote_atom_str(a2l(V))].
 
+quote_string(V) ->
+    quote_string(V, $").
+
+quote_string(V, QuoteChar) ->
+    text(quote_string_raw(V, QuoteChar)).
+
+quote_string_raw(V) ->
+    quote_string_raw(V, $").
+
+quote_string_raw(V, QuoteChar) ->
+    string:replace(io_lib:write_string(V, QuoteChar), "#{", "\\#{", all).
+
 maybe_quote_atom_str(Chars) ->
     case re:run(Chars, "^[a-zA-Z_][a-zA-Z0-9@_]*$") of
         nomatch ->
-            io_lib:write_string(Chars);
+            quote_string_raw(Chars);
         {match, _} ->
             Chars
     end.
@@ -504,7 +522,7 @@ quote_record_field(V) ->
     % will quote all erlang reserved words, I think it's ok
     case io_lib:quote_atom(V, Chars) of
         true ->
-            io_lib:write_string(Chars);
+            quote_string_raw(Chars);
         false ->
             Chars
     end.
@@ -678,7 +696,7 @@ pp_call_pos({atom, _, V}, Prefix, _Ctx) ->
     Name =
         case a2l(V) of
             L = [H | _] when not (H >= $a andalso H =< $z) ->
-                io_lib:write_string(L, $');
+                quote_string_raw(L, $');
             L ->
                 L
         end,
@@ -898,15 +916,18 @@ pp_bin_es(Es, Ctx) ->
 pp_bin_e({bin_element, _, Left, default, [binary]}, Ctx) ->
     wrap_pair(Ctx, dcolon_f(), pp_bin_e_v(Left, Ctx), text("binary"));
 pp_bin_e({bin_element, _, Left, Size, default}, Ctx) when Size =/= default ->
-    wrap_pair(Ctx, dcolon_f(), pp_bin_e_v(Left, Ctx), pp(Size, Ctx));
+    wrap_pair(Ctx, dcolon_f(), pp_bin_e_v(Left, Ctx), size_call(Size, Ctx));
 pp_bin_e({bin_element, _, Left, default, default}, Ctx) ->
     pp_bin_e_v(Left, Ctx);
 pp_bin_e({bin_element, _, Left, Size, Types}, Ctx) ->
     TypeMap = pp_bin_e_types(Types, Size, Ctx),
     wrap_pair(Ctx, dcolon_f(), pp(Left, Ctx), TypeMap).
 
+size_call(Expr, Ctx) ->
+    besidel([text("size("), pp(Expr, Ctx), text(")")]).
+
 pp_bin_e_v({string, _, V}, _Ctx) ->
-    text(io_lib:write_string(V));
+    quote_string(V);
 pp_bin_e_v(V, Ctx) ->
     pp(V, Ctx).
 
@@ -1599,3 +1620,16 @@ op_to_erlang_call(Line, Op, Args, Ctx) ->
 p_rec_name(RecName) ->
     Name = a2l(RecName),
     text(string:replace(["r_" | Name], "-", "_", all)).
+          
+format_non_printable_char(0)   -> "?\\0";
+format_non_printable_char(7)   -> "?\\a";
+format_non_printable_char($\b) -> "?\\b";
+format_non_printable_char($\d) -> "?\\d";
+format_non_printable_char($\e) -> "?\\e";
+format_non_printable_char($\f) -> "?\\f";
+format_non_printable_char($\n) -> "?\\n";
+format_non_printable_char($\r) -> "?\\r";
+format_non_printable_char($\s) -> "?\\s";
+format_non_printable_char($\t) -> "?\\t";
+format_non_printable_char($\v) -> "?\\v";
+format_non_printable_char(V) -> integer_to_list(V).

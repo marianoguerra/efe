@@ -4,7 +4,9 @@
          receive_match/0, try_match/0, fun_scope/0, named_fun_scope/0,
          lc_scope/0, case_expr_not_matching/0, vars_in_clauses/1,
          var_in_prev_fun/1, var_in_prev_fun1/1, match_in_head/2, if_clauses/1,
-         try_stacktrace/1, new_var_in_match/1]).
+         try_stacktrace/1, new_var_in_match/1, map_key_match/1,
+         right_head_match/2, match_on_right_side/0, lc_pattern_vars_in_expr/0,
+         match_left_var_not_on_right_side/0]).
 
 -record(user, {username = <<"meg">>}).
 
@@ -162,3 +164,40 @@ try_stacktrace(F) ->
 new_var_in_match(A) ->
     % second shouldn't match, var defined in pattern
     {Same, Same} = {1, A}.
+
+map_key_match(M) ->
+    case M of
+        #{M := 1} ->
+            ok;
+        _ ->
+            error
+    end.
+
+right_head_match(M, 1 = K) ->
+    case M of
+        #{K := 1} ->
+            ok;
+        _ ->
+            error
+    end.
+
+match_on_right_side() ->
+    K = 1,
+    % match on right side doesn't add hat (1 = k)
+    1 = K.
+
+lc_pattern_vars_in_expr() ->
+    % vars in pattern are in expr (body) scope, (^a = 1)
+    [A = 1 || A <- [1]],
+    % this var is new, vars in lc have their own scope (a = 1)
+    A = 1,
+    A.
+
+match_left_var_not_on_right_side() ->
+    V =
+        fun () ->
+                % shouldn't match, right side before left
+                V = 1,
+                V
+        end,
+    V.
