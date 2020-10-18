@@ -3,7 +3,25 @@
 -export([varnames/12, atoms/0, chars/0, calls/3, calls/0, long_calc/0, binops/0,
          instant_call/0, lc_no_gen/0, module_macro/0, uppercase_funs/2,
          fun_no_args_when/1, 'substring-after'/0, call_call/0,
-         escape_str_interpolation/0, printable_chars/0]).
+         escape_str_interpolation/0, printable_chars/0, wrap_stmt/1,
+         local_calls_qualified/2, '+~+'/0, alias/2, def/2, call_conflict/0]).
+
+% on_load is private
+-on_load on_load/0.
+
+% duplicated import
+-import(foo, [to_string/1, to_string/1]).
+
+send(A, B) ->
+    A ! B.
+
+local_calls_qualified(A, B) ->
+    % should add module to disambiguate from Kernel.* versions
+    send(self(), ok),
+    {to_string(42), monitor_node(A, B)}.
+
+on_load() ->
+    ok.
 
 varnames(When, And, Or, Not, In, Fn, Do, End, Catch, Rescue, After, Else) ->
     {When, And, Or, Not, In, Fn, Do, End, Catch, Rescue, After, Else}.
@@ -105,3 +123,28 @@ chars() ->
 
 printable_chars() ->
     [$a, $z, $A, $Z, $0, $9, $\000, $\377, $\\, $\n].
+
+wrap_stmt(Cs) ->
+    [C
+     || C <- Cs,
+        lists:member(C, [ed25519, ed448, x25519, x448]) orelse
+            try crypto:generate_key(ecdh, C) of
+                _ ->
+                    true
+            catch
+                _:_ ->
+                    false
+            end].
+
+'+~+'() ->
+    '+~+'().
+
+alias(A, B) ->
+    {A, B}.
+
+def(A, B) ->
+    {A, B}.
+
+call_conflict() ->
+    alias(1, 2),
+    def(1, 2).

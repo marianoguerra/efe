@@ -109,6 +109,27 @@ map({attribute, Line, type, {N, T, Vs}}, St) ->
     {T1, St1} = ast:type(T, St, Fn),
     {Vs1, _St2} = ast:variable_list(Vs, St1, Fn),
     {ok, {attribute, Line, type, {N, T1, Vs1}}, St};
+map({attribute, Line, opaque, {N, T, Vs}}, St) ->
+    % ignore vars introduced in opaque
+    Fn = fun map/2,
+    {T1, St1} = ast:type(T, St, Fn),
+    {Vs1, _St2} = ast:variable_list(Vs, St1, Fn),
+    {ok, {attribute, Line, opaque, {N, T1, Vs1}}, St};
+map({attribute, Line, callback, {{N, A}, FTs}}, St) ->
+    % ignore vars introduced in callback
+    Fn = fun map/2,
+    {FTs1, _St1} = ast:function_type_list(FTs, St, Fn),
+    {ok, {attribute, Line, callback, {{N, A}, FTs1}}, St};
+map({attribute, Line, optional_callbacks, Es0}, St) ->
+    % ignore vars introduced in optional_callback
+    Fn = fun map/2,
+    try ast:farity_list(Es0, St, Fn) of
+        {Es1, _St1} ->
+            {ok, {attribute, Line, optional_callbacks, Es1}, St}
+    catch
+        _:_ ->
+            {ok, {attribute, Line, optional_callbacks, Es0}, St}
+    end;
 map({'fun', Line, {clauses, Cs0}}, St) ->
     {Cs1, St1} = fun_clauses(Cs0, St),
     {ok, {'fun', Line, {clauses, Cs1}}, St1};

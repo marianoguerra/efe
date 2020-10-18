@@ -6,9 +6,30 @@
          var_in_prev_fun/1, var_in_prev_fun1/1, match_in_head/2, if_clauses/1,
          try_stacktrace/1, new_var_in_match/1, map_key_match/1,
          right_head_match/2, match_on_right_side/0, lc_pattern_vars_in_expr/0,
-         match_left_var_not_on_right_side/0]).
+         match_left_var_not_on_right_side/0, take/2]).
 
 -record(user, {username = <<"meg">>}).
+-record(handler,
+        {module :: atom(),
+         id = false,
+         state,
+         supervised = false :: false | pid()}).
+
+-callback format_status(Opt, StatusData) -> Status when Opt :: normal |
+                                                               terminate,
+                                                        StatusData :: [PDict |
+                                                                       State],
+                                                        PDict :: [{Key ::
+                                                                       term(),
+                                                                   Value ::
+                                                                       term()}],
+                                                        State :: term(),
+                                                        Status :: term().
+
+-type gb_tree_node(K, V) :: nil |
+                            {K, V, gb_tree_node(K, V), gb_tree_node(K, V)}.
+
+-opaque tree(Key, Value) :: {non_neg_integer(), gb_tree_node(Key, Value)}.
 
 noop() ->
     ok.
@@ -191,6 +212,7 @@ lc_pattern_vars_in_expr() ->
     [A = 1 || A <- [1]],
     % this var is new, vars in lc have their own scope (a = 1)
     A = 1,
+    [{Mod, Id, State} || #handler{module = Mod, id = Id, state = State} <- []],
     A.
 
 match_left_var_not_on_right_side() ->
@@ -201,3 +223,7 @@ match_left_var_not_on_right_side() ->
                 V
         end,
     V.
+
+take(_Smaller, Larger) ->
+    {Key, Value} = Larger,
+    Key + Value.

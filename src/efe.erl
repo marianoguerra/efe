@@ -49,8 +49,10 @@ annotate(Path) ->
              end).
 
 from_erl(Path) ->
-    IncludePath = filename:join([filename:dirname(Path), "../include/"]),
-    epp:parse_file(Path, [IncludePath], []).
+    PathDir = filename:dirname(Path),
+    IncludePaths =
+        filelib:wildcard(filename:join([PathDir, "../../*/include"])),
+    epp:parse_file(Path, [PathDir | IncludePaths], []).
 
 pprint_ex(Path, DoPrint) ->
     case from_erl(Path) of

@@ -43,8 +43,11 @@
          exports_all = false,
          exports = #{},
          records = #{},
+         imports = #{},
+         functions = #{},
          record_imported = false,
          stacktrace_varname = nil,
+         mod_prefix = "m_",
          break_indent = 4 :: non_neg_integer(),
          paper = ?PAPER :: integer(),
          ribbon = ?RIBBON :: integer()}).
@@ -53,7 +56,7 @@ layout(V) ->
     layout(V, default_ctx()).
 
 layout(V, Ctx) when is_list(V) ->
-    pp_mod(V, Ctx);
+    pp_mod(V, add_functions(V, Ctx));
 layout(V, Ctx) ->
     pp(V, Ctx).
 
@@ -75,11 +78,57 @@ set_stacktrace_var(Ctx, '_') ->
 set_stacktrace_var(Ctx, STraceVarName) ->
     Ctx#ctxt{stacktrace_varname = STraceVarName}.
 
+% add all top level functions to context before processing since definitions
+% can come after usage
+add_functions([], Ctx) ->
+    Ctx;
+add_functions([{function, _, Name, Arity, _Clauses} | T], Ctx) ->
+    NewFunctions = (Ctx#ctxt.functions)#{{Name, Arity} => true},
+    add_functions(T, Ctx#ctxt{functions = NewFunctions});
+add_functions([{attribute, _, import, {ModNameAtom, ImportRefs}} | T], Ctx) ->
+    NewImports =
+        lists:foldl(fun (Key, ImportsIn) ->
+                            ImportsIn#{Key => #{mod => ModNameAtom}}
+                    end,
+                    Ctx#ctxt.imports,
+                    ImportRefs),
+    add_functions(T, Ctx#ctxt{imports = NewImports});
+add_functions([_ | T], Ctx) ->
+    add_functions(T, Ctx).
+
+%is_local_function(Name, Arity, #ctxt{functions = Fs}) ->
+%    Key = {Name, Arity},
+%    maps:get(Key, Fs, false) =/= false.
+
+%is_imported_function(Name, Arity, #ctxt{imports = Is}) ->
+%    Key = {Name, Arity},
+%    case maps:get(Key, Is, nil) of
+%        nil ->
+%            false;
+%        #{mod := Mod} ->
+%            {true, Mod}
+%    end.
+
+maybe_ignore_kernel_fns(Ctx = #ctxt{imports = Is, functions = Fs}) ->
+    Fns = maps:keys(Is) ++ maps:keys(Fs),
+    Except = [{Name, Arity} || {Name, Arity} <- Fns, is_kernel_fn(Name, Arity)],
+    case Except of
+        [] ->
+            empty();
+        _ ->
+            besidel([text("import Kernel, except: ["),
+                     join(Except, Ctx, fun pp_fn_import_ref/2, comma_f()),
+                     text("]")])
+    end.
+
 pp_mod([], _Ctx) ->
     empty();
 pp_mod([{attribute, _, module, ModName} | Nodes], Ctx) ->
-    abovel([text("defmodule :m_" ++ a2l(ModName) ++ " do"),
-            nestc(Ctx, above(text("use Bitwise"), pp_mod(Nodes, Ctx))),
+    abovel([text("defmodule :" ++ Ctx#ctxt.mod_prefix ++ a2l(ModName) ++ " do"),
+            nestc(Ctx,
+                  abovel([text("use Bitwise"),
+                          maybe_ignore_kernel_fns(Ctx),
+                          pp_mod(Nodes, Ctx)])),
             text("end")]);
 pp_mod([Node = {attribute, _, record, {RecName, Fields}} | Nodes], Ctx) ->
     Ctx1 = add_record_declaration(RecName, Fields, Ctx),
@@ -164,7 +213,7 @@ pp({attribute, _, import, {ModNameAtom, Imports}}, Ctx) ->
                    besidel([text(":" ++ a2l(ModNameAtom)),
                             comma_f(),
                             text(" only:")]),
-                   wrap_list(join(Imports,
+                   wrap_list(join(deduplicate_list(Imports),
                                   Ctx,
                                   fun pp_fn_import_ref/2,
                                   comma_f()))));
@@ -172,8 +221,8 @@ pp({attribute, _, import, {ModNameAtom, Imports}}, Ctx) ->
 pp({attribute, _, export_type, _Exports}, _Ctx) ->
     % pp_attr_fun_list("@export_type ", Exports, Ctx);
     empty();
-pp({attribute, _, on_load, V = {_FName, _Arity}}, Ctx) ->
-    besidel([text("@on_load "), pp_fn_ref(V, Ctx)]);
+pp({attribute, _, on_load, {FName, 0}}, _Ctx) ->
+    besidel([text("@on_load "), quote_atom(FName)]);
 pp({attribute, _, deprecated, _V = {_FName, _Arity, _When}}, _Ctx) ->
     %besidel([text("@deprecated "), pp_fn_deprecated_ref(V, Ctx)]);
     empty();
@@ -250,7 +299,7 @@ pp({char, _, $\^C}, _Ctx) ->
 pp({char, _, V}, _Ctx) when V >= 32 andalso V =< 127 ->
     text("?" ++ [V]);
 pp({char, _, V}, _Ctx) ->
-   text(format_non_printable_char(V));
+    text(format_non_printable_char(V));
 pp({record, _, RecName, Fields}, Ctx) ->
     pp_rec_new(RecName, Fields, Ctx);
 pp({record, _, CurRecExpr, RecName, Fields}, Ctx) ->
@@ -356,9 +405,9 @@ pp({op, Line, Op, Left, Right}, Ctx) ->
             op_to_erlang_call(Line, Op, [Left, Right], Ctx);
         false ->
             {LeftPrec, Prec, RightPrec} = inop_prec(Op),
-            D1 = pp(Left, Ctx#ctxt{prec = LeftPrec}),
+            D1 = pp_oper(Left, Ctx#ctxt{prec = LeftPrec}),
             D2 = text(atom_to_list(map_op_reverse(Op))),
-            D3 = pp(Right, Ctx#ctxt{prec = RightPrec}),
+            D3 = pp_oper(Right, Ctx#ctxt{prec = RightPrec}),
             D4 = besidel([D1, text(" "), D2, text(" "), D3]),
             maybe_paren(Prec, Ctx#ctxt.prec, D4)
     end;
@@ -441,6 +490,30 @@ pp({'try', _, Expr, OfCases, Clauses, AfterBody}, Ctx0) ->
 pp({eof, _}, _Ctx) ->
     empty().
 
+% wrap statements in value position in parenthesis
+pp_oper(Expr = {lc, _, _Body, _Gens}, Ctx) ->
+    wrap_parens(pp(Expr, Ctx));
+pp_oper(Expr = {bc, _, _Body, _Gens}, Ctx) ->
+    wrap_parens(pp(Expr, Ctx));
+pp_oper(Expr = {block, _, _Body}, Ctx) ->
+    wrap_parens(pp(Expr, Ctx));
+pp_oper(Expr = {'if', _, _Clauses}, Ctx) ->
+    wrap_parens(pp(Expr, Ctx));
+pp_oper(Expr = {'case', _, _Expr, _Clauses}, Ctx) ->
+    wrap_parens(pp(Expr, Ctx));
+pp_oper(Expr = {'receive', _, _Clauses}, Ctx) ->
+    wrap_parens(pp(Expr, Ctx));
+pp_oper(Expr = {'receive', _, _Clauses, _AfterExpr, _AfterBody}, Ctx) ->
+    wrap_parens(pp(Expr, Ctx));
+pp_oper(Expr = {'catch', _, _Expr}, Ctx) ->
+    wrap_parens(pp(Expr, Ctx));
+pp_oper(Expr = {'try', _, _Body, [], _Clauses, _AfterBody}, Ctx) ->
+    wrap_parens(pp(Expr, Ctx));
+pp_oper(Expr = {'try', _, _Expr, _OfCases, _Clauses, _AfterBody}, Ctx) ->
+    wrap_parens(pp(Expr, Ctx));
+pp_oper(Expr, Ctx) ->
+    pp(Expr, Ctx).
+
 function_exported(#ctxt{exports_all = true}, _, _) ->
     true;
 function_exported(#ctxt{exports = Exports}, Name, Arity) ->
@@ -453,16 +526,21 @@ pp_function_clauses([Clause | Clauses], Name, DefKw, Ctx) ->
           pp_function_clauses(Clauses, Name, DefKw, Ctx)).
 
 pp_function_clause({clause, _, [], [], Body}, Name, DefKw, Ctx) ->
-    pp_header_and_body(Ctx, text(DefKw ++ " " ++ a2l(Name) ++ " do"), Body);
+    pp_header_and_body(Ctx,
+                       text(DefKw ++ " " ++ pp_def_fn_name(Name) ++ "() do"),
+                       Body);
 pp_function_clause({clause, _, Patterns, [], Body}, Name, DefKw, Ctx) ->
     pp_header_and_body(Ctx,
-                       beside(text(DefKw ++ " " ++ a2l(Name) ++ "("),
+                       beside(text(DefKw ++ " " ++ pp_def_fn_name(Name) ++ "("),
                               beside(pp_args_inn(Patterns, Ctx), text(") do"))),
                        Body);
 pp_function_clause({clause, _, Patterns, Guards, Body}, Name, DefKw, Ctx) ->
     pp_header_and_body(Ctx,
                        followc(Ctx,
-                               besidel([text(DefKw ++ " " ++ a2l(Name) ++ "("),
+                               besidel([text(DefKw ++
+                                                 " " ++
+                                                     pp_def_fn_name(Name) ++
+                                                         "("),
                                         pp_args_inn(Patterns, Ctx),
                                         text(")")]),
                                beside(text("when "),
@@ -510,11 +588,19 @@ quote_string_raw(V, QuoteChar) ->
     string:replace(io_lib:write_string(V, QuoteChar), "#{", "\\#{", all).
 
 maybe_quote_atom_str(Chars) ->
+    case should_quote_atom_str(Chars) of
+        true ->
+            quote_string_raw(Chars);
+        false ->
+            Chars
+    end.
+
+should_quote_atom_str(Chars) ->
     case re:run(Chars, "^[a-zA-Z_][a-zA-Z0-9@_]*$") of
         nomatch ->
-            quote_string_raw(Chars);
+            true;
         {match, _} ->
-            Chars
+            false
     end.
 
 quote_record_field(V) ->
@@ -654,11 +740,17 @@ arity_to_list('_') ->
 arity_to_list(V) ->
     integer_to_list(V).
 
+% TODO: check tuple size if record info in ctx
+pp_call({atom, _, is_record}, [Expr, {atom, _, RecTag}], Ctx) ->
+    besidel([text("elem("),
+             pp(Expr, Ctx),
+             text(", 0) === "),
+             quote_atom(RecTag)]);
 pp_call(FName, Args, Ctx) ->
-    case should_prefix_erlang_call(FName, length(Args)) of
-        true ->
+    case should_prefix_call(FName, length(Args), Ctx) of
+        {true, {Type, Mod}} ->
             {_, Line, _} = FName,
-            pp_call_f({atom, Line, erlang}, FName, Args, Ctx, fun pp/2);
+            pp_call_f({Type, Line, Mod}, FName, Args, Ctx, fun pp/2);
         false ->
             pp_call_f(FName, Args, Ctx, fun pp/2)
     end.
@@ -693,14 +785,7 @@ pp_call_pos(V = {var, _, _}, _, Ctx) ->
 pp_call_pos(V = {var, _, _, _}, _, Ctx) ->
     beside(pp(V, Ctx), text("."));
 pp_call_pos({atom, _, V}, Prefix, _Ctx) ->
-    Name =
-        case a2l(V) of
-            L = [H | _] when not (H >= $a andalso H =< $z) ->
-                quote_string_raw(L, $');
-            L ->
-                L
-        end,
-    text(Prefix ++ Name);
+    text(Prefix ++ pp_call_fn_name(V));
 pp_call_pos(V, _, Ctx) ->
     beside(oparen_f(), beside(pp(V, Ctx), cparen_f())).
 
@@ -712,6 +797,33 @@ pp_call_method_pos({atom, _, V}, Prefix, _Ctx) ->
     text(Prefix ++ a2l(V));
 pp_call_method_pos(V, _, Ctx) ->
     beside(oparen_f(), beside(pp(V, Ctx), cparen_f())).
+
+pp_def_fn_name(V) ->
+    pp_def_fn_name(V, "").
+
+pp_def_fn_name(V, Prefix) ->
+    Name = a2l(V),
+    case should_quote_atom_str(Name) of
+        true ->
+            [Prefix, "unquote(", quote_atom_raw(V), ")"];
+        false ->
+            [Prefix, Name]
+    end.
+
+pp_call_fn_name(V) ->
+    Name = a2l(V),
+    case should_quote_atom_str(Name) of
+        true ->
+            quote_string_raw(Name, $');
+        false ->
+            % words starting with uppercase should be quoted too
+            case Name of
+                [H | _] when H < $a orelse H > $z ->
+                    quote_string_raw(Name, $');
+                _ ->
+                    Name
+            end
+    end.
 
 pp_args([], _Ctx, _PPFun) ->
     text("()");
@@ -894,13 +1006,13 @@ pp_lc_gens(Items, Ctx) ->
 
 pp_lc_gen({generate, _, Left, Right}, Ctx) ->
     % TODO: add parens only when statement
-    wrap(text(" <- "), pp(Left, Ctx), wrap_parens(pp(Right, Ctx)));
+    wrap(text(" <- "), pp_oper(Left, Ctx), pp_oper(Right, Ctx));
 pp_lc_gen({b_generate, _, Left, Right}, Ctx) ->
     besidel([text("<< "),
-             wrap(text(" <- "), pp(Left, Ctx), pp(Right, Ctx)),
+             wrap(text(" <- "), pp_oper(Left, Ctx), pp_oper(Right, Ctx)),
              text(" >>")]);
 pp_lc_gen(Filter, Ctx) ->
-    pp(Filter, Ctx).
+    pp_oper(Filter, Ctx).
 
 % TODO: precedence
 pp_guards(Guards, Ctx) ->
@@ -921,7 +1033,7 @@ pp_bin_e({bin_element, _, Left, default, default}, Ctx) ->
     pp_bin_e_v(Left, Ctx);
 pp_bin_e({bin_element, _, Left, Size, Types}, Ctx) ->
     TypeMap = pp_bin_e_types(Types, Size, Ctx),
-    wrap_pair(Ctx, dcolon_f(), pp(Left, Ctx), TypeMap).
+    wrap_pair(Ctx, dcolon_f(), pp_bin_e_v(Left, Ctx), TypeMap).
 
 size_call(Expr, Ctx) ->
     besidel([text("size("), pp(Expr, Ctx), text(")")]).
@@ -1331,6 +1443,8 @@ is_autoimported(module_loaded, 1) ->
     true;
 is_autoimported(monitor, 2) ->
     true;
+is_autoimported(monitor_node, 2) ->
+    true;
 is_autoimported(node, 0) ->
     true;
 is_autoimported(node, 1) ->
@@ -1384,6 +1498,8 @@ is_autoimported(round, 1) ->
 is_autoimported(self, 0) ->
     true;
 is_autoimported(setelement, 3) ->
+    true;
+is_autoimported(statistics, 1) ->
     true;
 is_autoimported(size, 1) ->
     true;
@@ -1548,6 +1664,18 @@ should_prefix_erlang_call({record_field, _, _RecExpr, _RecName, _Field},
                           _Arity) ->
     false.
 
+should_prefix_call({atom, _, alias}, _, _Ctx) ->
+    {true, {var, '__MODULE__'}};
+should_prefix_call({atom, _, def}, _, _Ctx) ->
+    {true, {var, '__MODULE__'}};
+should_prefix_call(Ast, Arity, _Ctx) ->
+    case should_prefix_erlang_call(Ast, Arity) of
+        true ->
+            {true, {atom, erlang}};
+        false ->
+            false
+    end.
+
 is_ex_reserved_varname("nil") ->
     true;
 is_ex_reserved_varname("true") ->
@@ -1620,16 +1748,204 @@ op_to_erlang_call(Line, Op, Args, Ctx) ->
 p_rec_name(RecName) ->
     Name = a2l(RecName),
     text(string:replace(["r_" | Name], "-", "_", all)).
-          
-format_non_printable_char(0)   -> "?\\0";
-format_non_printable_char(7)   -> "?\\a";
-format_non_printable_char($\b) -> "?\\b";
-format_non_printable_char($\d) -> "?\\d";
-format_non_printable_char($\e) -> "?\\e";
-format_non_printable_char($\f) -> "?\\f";
-format_non_printable_char($\n) -> "?\\n";
-format_non_printable_char($\r) -> "?\\r";
-format_non_printable_char($\s) -> "?\\s";
-format_non_printable_char($\t) -> "?\\t";
-format_non_printable_char($\v) -> "?\\v";
-format_non_printable_char(V) -> integer_to_list(V).
+
+format_non_printable_char(0) ->
+    "?\\0";
+format_non_printable_char(7) ->
+    "?\\a";
+format_non_printable_char($\b) ->
+    "?\\b";
+format_non_printable_char($\d) ->
+    "?\\d";
+format_non_printable_char($\e) ->
+    "?\\e";
+format_non_printable_char($\f) ->
+    "?\\f";
+format_non_printable_char($\n) ->
+    "?\\n";
+format_non_printable_char($\r) ->
+    "?\\r";
+format_non_printable_char($\s) ->
+    "?\\s";
+format_non_printable_char($\t) ->
+    "?\\t";
+format_non_printable_char($\v) ->
+    "?\\v";
+format_non_printable_char(V) ->
+    integer_to_list(V).
+
+is_kernel_fn('!', 1) ->
+    true;
+is_kernel_fn('&&', 2) ->
+    true;
+is_kernel_fn('++', 2) ->
+    true;
+is_kernel_fn('--', 2) ->
+    true;
+is_kernel_fn('..', 2) ->
+    true;
+is_kernel_fn('<>', 2) ->
+    true;
+is_kernel_fn('=~', 2) ->
+    true;
+is_kernel_fn('@', 1) ->
+    true;
+is_kernel_fn('|>', 2) ->
+    true;
+is_kernel_fn('||', 2) ->
+    true;
+is_kernel_fn('alias!', 1) ->
+    true;
+is_kernel_fn(apply, 2) ->
+    true;
+is_kernel_fn(apply, 3) ->
+    true;
+is_kernel_fn(binding, 1) ->
+    true;
+% can't not import this one :)
+%is_kernel_fn(def, 2) ->
+%    true;
+is_kernel_fn(defdelegate, 2) ->
+    true;
+is_kernel_fn(defexception, 1) ->
+    true;
+is_kernel_fn(defguard, 1) ->
+    true;
+is_kernel_fn(defguardp, 1) ->
+    true;
+is_kernel_fn(defimpl, 3) ->
+    true;
+is_kernel_fn(defmacro, 2) ->
+    true;
+is_kernel_fn(defmacrop, 2) ->
+    true;
+is_kernel_fn(defmodule, 2) ->
+    true;
+is_kernel_fn(defoverridable, 1) ->
+    true;
+is_kernel_fn(defp, 2) ->
+    true;
+is_kernel_fn(defprotocol, 2) ->
+    true;
+is_kernel_fn(defstruct, 1) ->
+    true;
+is_kernel_fn(destructure, 2) ->
+    true;
+is_kernel_fn(exit, 1) ->
+    true;
+is_kernel_fn('function_exported?', 3) ->
+    true;
+is_kernel_fn(get_and_update_in, 2) ->
+    true;
+is_kernel_fn(get_and_update_in, 3) ->
+    true;
+is_kernel_fn(get_in, 2) ->
+    true;
+is_kernel_fn('if', 2) ->
+    true;
+is_kernel_fn(inspect, 2) ->
+    true;
+is_kernel_fn('macro_exported?', 3) ->
+    true;
+is_kernel_fn(make_ref, 0) ->
+    true;
+is_kernel_fn('match?', 2) ->
+    true;
+is_kernel_fn(max, 2) ->
+    true;
+is_kernel_fn(min, 2) ->
+    true;
+is_kernel_fn(pop_in, 1) ->
+    true;
+is_kernel_fn(pop_in, 2) ->
+    true;
+is_kernel_fn(put_elem, 3) ->
+    true;
+is_kernel_fn(put_in, 2) ->
+    true;
+is_kernel_fn(put_in, 3) ->
+    true;
+is_kernel_fn(raise, 1) ->
+    true;
+is_kernel_fn(raise, 2) ->
+    true;
+is_kernel_fn(reraise, 2) ->
+    true;
+is_kernel_fn(reraise, 3) ->
+    true;
+is_kernel_fn(send, 2) ->
+    true;
+is_kernel_fn(sigil_C, 2) ->
+    true;
+is_kernel_fn(sigil_D, 2) ->
+    true;
+is_kernel_fn(sigil_N, 2) ->
+    true;
+is_kernel_fn(sigil_R, 2) ->
+    true;
+is_kernel_fn(sigil_S, 2) ->
+    true;
+is_kernel_fn(sigil_T, 2) ->
+    true;
+is_kernel_fn(sigil_U, 2) ->
+    true;
+is_kernel_fn(sigil_W, 2) ->
+    true;
+is_kernel_fn(sigil_c, 2) ->
+    true;
+is_kernel_fn(sigil_r, 2) ->
+    true;
+is_kernel_fn(sigil_s, 2) ->
+    true;
+is_kernel_fn(sigil_w, 2) ->
+    true;
+is_kernel_fn(spawn, 1) ->
+    true;
+is_kernel_fn(spawn, 3) ->
+    true;
+is_kernel_fn(spawn_link, 1) ->
+    true;
+is_kernel_fn(spawn_link, 3) ->
+    true;
+is_kernel_fn(spawn_monitor, 1) ->
+    true;
+is_kernel_fn(spawn_monitor, 3) ->
+    true;
+is_kernel_fn(struct, 2) ->
+    true;
+is_kernel_fn('struct!', 2) ->
+    true;
+is_kernel_fn(throw, 1) ->
+    true;
+is_kernel_fn(to_charlist, 1) ->
+    true;
+is_kernel_fn(to_string, 1) ->
+    true;
+is_kernel_fn(unless, 2) ->
+    true;
+is_kernel_fn(update_in, 2) ->
+    true;
+is_kernel_fn(update_in, 3) ->
+    true;
+is_kernel_fn(use, 2) ->
+    true;
+is_kernel_fn('var!', 2) ->
+    true;
+is_kernel_fn(_, _) ->
+    false.
+
+deduplicate_list(L) ->
+    deduplicate_list(L, [], #{}).
+
+deduplicate_list([], Accum, _Seen) ->
+    lists:reverse(Accum);
+deduplicate_list([H | T], Accum, Seen) ->
+    NewSeen = Seen#{H => true},
+    NewAccum =
+        case maps:get(H, Seen, false) of
+            false ->
+                [H | Accum];
+            true ->
+                Accum
+        end,
+    deduplicate_list(T, NewAccum, NewSeen).

@@ -1,7 +1,7 @@
 -module(bincomp).
 
 -export([simple/0, bc/0, bc1/0, bsg/0, beam_asm1/2, specifier/1, resolve_inst/4,
-         byte_align/1]).
+         byte_align/1, bin_literal_str/1]).
 
 simple() ->
     [Red || <<Red:2/binary, _Blue:2/binary>> <= <<1, 2, 3, 4, 5, 6, 7, 8>>].
@@ -51,3 +51,6 @@ byte_align(Bs) ->
         N ->
             <<Bs/bitstring, 0:(8 - N)>>
     end.
+
+bin_literal_str(<<"//"/utf8, Rest/binary>>) ->
+    Rest.
