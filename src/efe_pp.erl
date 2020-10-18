@@ -549,14 +549,14 @@ pp_function_clause({clause, _, Patterns, Guards, Body}, Name, DefKw, Ctx) ->
                        Body).
 
 pp_args_inn(Args, Ctx) ->
-    pp_args_inn(Args, Ctx, fun pp/2).
+    pp_args_inn(Args, Ctx, fun pp/2, fun ueval/1).
 
-pp_args_inn([], _Ctx, _PPFun) ->
+pp_args_inn([], _Ctx, _PPFun, _EvalFn) ->
     empty();
-pp_args_inn([Arg], Ctx, PPFun) ->
-    PPFun(Arg, Ctx);
-pp_args_inn(Args, Ctx, PPFun) ->
-    join(Args, Ctx, PPFun, comma_f()).
+pp_args_inn([Arg], Ctx, PPFun, EvalFn) ->
+    PPFun(EvalFn(Arg), Ctx);
+pp_args_inn(Args, Ctx, PPFun, EvalFn) ->
+    join([EvalFn(Arg) || Arg <- Args], Ctx, PPFun, comma_f()).
 
 pp_header_and_body_no_end(Ctx, HeaderLayout, Body) ->
     sep([HeaderLayout, nestc(Ctx, pp_body(Body, Ctx))]).
@@ -825,10 +825,12 @@ pp_call_fn_name(V) ->
             end
     end.
 
+identity(V) -> V.
+
 pp_args([], _Ctx, _PPFun) ->
     text("()");
 pp_args(Args, Ctx, PPFun) ->
-    beside(oparen_f(), beside(pp_args_inn(Args, Ctx, PPFun), cparen_f())).
+    beside(oparen_f(), beside(pp_args_inn(Args, Ctx, PPFun, fun identity/1), cparen_f())).
 
 quote_atom(V) ->
     text(quote_atom_raw(V)).
@@ -1949,3 +1951,62 @@ deduplicate_list([H | T], Accum, Seen) ->
                 Accum
         end,
     deduplicate_list(T, NewAccum, NewSeen).
+
+ueval(Ast = {op, Line, Op, E}) ->
+    case ueval(E) of
+        {integer, _, V} ->
+            Res = case Op of
+                '+' -> V;
+                '-' -> -V;
+                'bnot' -> bnot V;
+                          _ -> error
+                  end,
+            case Res of
+                error ->
+                    Ast;
+                _ ->
+                    {integer, Line, Res}
+            end;
+        _ -> Ast
+    end;
+ 
+ueval({tuple, Line, Items}) ->
+        {tuple, Line, [ueval(Item) || Item <- Items]};
+ueval(Ast = {op, Line, Op, EL, ER}) ->
+    case {ueval(EL), ueval(ER)} of
+        {{integer, _, L}, {integer, _, R}} ->
+            Res =
+                case Op of
+                    '+' ->
+                        L + R;
+                    '-' ->
+                        L - R;
+                    '*' ->
+                        L * R;
+                    'div' ->
+                        L div R;
+                    'rem' ->
+                        L rem R;
+                    'band' ->
+                        L band R;
+                    'bor' ->
+                        L bor R;
+                    'bxor' ->
+                        L bxor R;
+                    'bsl' ->
+                        L bsl R;
+                    'bsr' ->
+                        L bsr R;
+                    _ ->
+                        error
+                end,
+            case Res of
+                error ->
+                    Ast;
+                _ ->
+                    {integer, Line, Res}
+            end;
+        _ -> Ast
+    end;
+ueval(Ast) ->
+    Ast.
