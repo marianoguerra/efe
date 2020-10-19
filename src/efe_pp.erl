@@ -172,7 +172,7 @@ pp({attribute, _, record, {RecName, []}}, _Ctx) ->
              p_rec_name(RecName),
              text(", "),
              quote_atom(RecName),
-             text(", efe_DUMMY_FIELD_EMPTY_RECORD: :undefined)")]);
+             text(", [])")]);
 pp({attribute, _, record, {RecName, Fields}}, Ctx) ->
     besidel([text("Record.defrecord(:"),
              p_rec_name(RecName),
