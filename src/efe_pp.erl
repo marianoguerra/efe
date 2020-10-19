@@ -238,8 +238,10 @@ pp({attribute, _, deprecated_type, _}, _Ctx) ->
 % TODO:
 pp({attribute, _, removed_type, _}, _Ctx) ->
     empty();
-pp({attribute, _, inline, Exports}, Ctx) ->
-    pp_attr_fun_list("@inline ", Exports, Ctx);
+% TODO:
+pp({attribute, _, inline, _Exports}, _Ctx) ->
+    %pp_attr_fun_list("@inline ", Exports, Ctx);
+    empty();
 pp({attribute, _, export, _}, _Ctx) ->
     empty();
 pp({attribute, _, compile, export_all}, _Ctx) ->
@@ -803,7 +805,7 @@ pp_def_fn_name(V) ->
 
 pp_def_fn_name(V, Prefix) ->
     Name = a2l(V),
-    case should_quote_atom_str(Name) of
+    case should_quote_def_fn_name(Name) of
         true ->
             [Prefix, "unquote(", quote_atom_raw(V), ")"];
         false ->
@@ -824,6 +826,14 @@ pp_call_fn_name(V) ->
                     Name
             end
     end.
+
+should_quote_def_fn_name("in") -> true;
+should_quote_def_fn_name("and") -> true;
+should_quote_def_fn_name("or") -> true;
+should_quote_def_fn_name("nil") -> true;
+should_quote_def_fn_name("not") -> true;
+should_quote_def_fn_name(Name) ->
+        should_quote_atom_str(Name).
 
 identity(V) -> V.
 
@@ -989,10 +999,10 @@ pp_for(Gens, Ctx, BodyL) ->
           above(nestc(Ctx, BodyL), text("end"))).
 
 pp_bfor(Gens, Ctx, BodyL) ->
-    above(sep([text("for"), pp_lc_gens(Gens, Ctx), text(", into: <<>> do")]),
+    above(besidel([text("for "), pp_lc_gens(Gens, Ctx), text(", into: <<>> do")]),
           above(nestc(Ctx, BodyL), text("end"))).
 
-pp_lc_gens([Filter], Ctx)
+pp_lc_gens(Gens=[Filter | _], Ctx)
     when element(1, Filter) =/= generate andalso
              element(1, Filter) =/= b_generate ->
     Line = element(2, Filter),
@@ -1001,8 +1011,8 @@ pp_lc_gens([Filter], Ctx)
         {generate,
          Line,
          {var, Line, '_'},
-         {cons, Line, {atom, Line, nil}, {nil, Line}}},
-    pp_lc_gens([DummyGen, Filter], Ctx);
+         {cons, Line, {atom, Line, 'EFE_DUMMY_GEN'}, {nil, Line}}},
+    pp_lc_gens([DummyGen | Gens], Ctx);
 pp_lc_gens(Items, Ctx) ->
     join(Items, Ctx, fun pp_lc_gen/2, comma_f()).
 
@@ -1123,7 +1133,7 @@ pp_record_field_decl({record_field, L1, {atom, L2, Name}}, Ctx) ->
                          Ctx);
 pp_record_field_decl({record_field, _, {atom, _, Name}, {record, _, _, _}},
                      _Ctx) ->
-    besidel([text(quote_record_field(Name)), text(": :TODO_NESTED_RECORD")]);
+    besidel([text(quote_record_field(Name)), text(": :EFE_TODO_NESTED_RECORD")]);
 pp_record_field_decl({record_field, _, {atom, _, Name}, Default}, Ctx) ->
     besidel([text(quote_record_field(Name)), text(": "), pp(Default, Ctx)]).
 
@@ -1248,6 +1258,8 @@ is_autoimported(abs, 1) ->
 is_autoimported(apply, 2) ->
     true;
 is_autoimported(apply, 3) ->
+    true;
+is_autoimported(atom_to_binary, 1) ->
     true;
 is_autoimported(atom_to_binary, 2) ->
     true;
@@ -1533,6 +1545,12 @@ is_autoimported(spawn_opt, 4) ->
     true;
 is_autoimported(spawn_opt, 5) ->
     true;
+is_autoimported(spawn_request, 1) -> true;
+is_autoimported(spawn_request, 2) -> true;
+is_autoimported(spawn_request, 3) -> true;
+is_autoimported(spawn_request, 4) -> true;
+is_autoimported(spawn_request, 5) -> true;
+is_autoimported(spawn_request_abandon, 1) -> true;
 is_autoimported(split_binary, 2) ->
     true;
 is_autoimported(term_to_binary, 1) ->
@@ -1669,6 +1687,10 @@ should_prefix_erlang_call({record_field, _, _RecExpr, _RecName, _Field},
 should_prefix_call({atom, _, alias}, _, _Ctx) ->
     {true, {var, '__MODULE__'}};
 should_prefix_call({atom, _, def}, _, _Ctx) ->
+    {true, {var, '__MODULE__'}};
+should_prefix_call({atom, _, module_info}, 0, _Ctx) ->
+    {true, {var, '__MODULE__'}};
+should_prefix_call({atom, _, module_info}, 1, _Ctx) ->
     {true, {var, '__MODULE__'}};
 should_prefix_call(Ast, Arity, _Ctx) ->
     case should_prefix_erlang_call(Ast, Arity) of
@@ -1846,6 +1868,8 @@ is_kernel_fn(get_in, 2) ->
 is_kernel_fn('if', 2) ->
     true;
 is_kernel_fn(inspect, 2) ->
+    true;
+is_kernel_fn(length, 1) ->
     true;
 is_kernel_fn('macro_exported?', 3) ->
     true;

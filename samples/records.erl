@@ -9,7 +9,7 @@
 -record(empty, {}).
 -record(user, {username = <<"meg">>, age = 25, team = #empty{}}).
 -record('Group', {username = <<"meg">>, age = 25, team, 'type-id' = 1}).
--record('A-B-c', {a = 1}).
+-record('A-B-c', {a = quote_record()}).
 -record(state, {function}).
 
 quote_record() ->

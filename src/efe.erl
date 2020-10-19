@@ -51,8 +51,10 @@ annotate(Path) ->
 from_erl(Path) ->
     PathDir = filename:dirname(Path),
     IncludePaths =
-        filelib:wildcard(filename:join([PathDir, "../../*/include"])),
-    epp:parse_file(Path, [PathDir | IncludePaths], []).
+        filelib:wildcard(filename:join([PathDir, "../../*/include"])) ++
+        filelib:wildcard(filename:join([PathDir, "../../*/src"])),
+        Encoding = latin1,
+    epp:parse_file(Path, [{includes, [PathDir | IncludePaths]}, {default_encoding, Encoding}]).
 
 pprint_ex(Path, DoPrint) ->
     case from_erl(Path) of

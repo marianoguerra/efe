@@ -8,3 +8,7 @@ build:
 
 otp-test: build
 	@for i in otplib/*/src/*.erl; do echo "# $$i";./_build/default/bin/efe pp $$i > $$(echo out/`basename $$i .erl`.ex) ; done
+
+otp-compile: build
+	@cd out && for f in *.ex; do echo "# $$f" >> result.txt; elixirc $$f >> result.txt; done
+

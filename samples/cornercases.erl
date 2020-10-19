@@ -4,7 +4,7 @@
          instant_call/0, lc_no_gen/0, module_macro/0, uppercase_funs/2,
          fun_no_args_when/1, 'substring-after'/0, call_call/0,
          escape_str_interpolation/0, printable_chars/0, wrap_stmt/1,
-         local_calls_qualified/2, '+~+'/0, alias/2, def/2, call_conflict/0]).
+         local_calls_qualified/2, '+~+'/0, alias/2, def/2, call_conflict/0, in/3, encoding/0], module_info_calls/0).
 
 % on_load is private
 -on_load on_load/0.
@@ -78,11 +78,16 @@ instant_call() ->
     end().
 
 lc_no_gen() ->
+    Enc = utf8,
+    Opts = [],
     % elixir for needs a generator, add a dummy `_ <- [nil]` generator
     {[ok || true],
      [ok || false],
      [ok || _ <- [nil], true],
-     [ok || _ <- [nil], false]}.
+     [ok || _ <- [nil], false],
+     [{encoding, Enc} ||
+      Enc =/= none,
+      not proplists:get_bool(comments, Opts)]}.
 
 module_macro() ->
     ?MODULE.
@@ -148,3 +153,13 @@ def(A, B) ->
 call_conflict() ->
     alias(1, 2),
     def(1, 2).
+
+in(A, B, C) -> A + B + C.
+
+encoding() ->
+                {"&ouml;","ö"},
+                {"&auml;","ä"},
+                {"&aring;","å"}.
+
+module_info_calls() ->
+    {module_info(), module_info(md5)}.
