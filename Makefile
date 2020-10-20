@@ -12,3 +12,6 @@ otp-test: build
 otp-compile: build
 	@cd out && for f in *.ex; do echo "# $$f" >> result.txt; elixirc $$f >> result.txt; done
 
+format-output:
+	@cd out && for f in *.ex; do mix format $$f; done
+
