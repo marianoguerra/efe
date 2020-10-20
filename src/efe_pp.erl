@@ -45,12 +45,16 @@
          records = #{},
          imports = #{},
          functions = #{},
+         in_guard = false,
          record_imported = false,
          stacktrace_varname = nil,
          mod_prefix = "m_",
          break_indent = 4 :: non_neg_integer(),
          paper = ?PAPER :: integer(),
          ribbon = ?RIBBON :: integer()}).
+
+enter_guard(Ctx) ->
+    Ctx#ctxt{in_guard = true}.
 
 layout(V) ->
     layout(V, default_ctx()).
@@ -401,6 +405,13 @@ pp({op, _, 'rem', Left, Right}, Ctx) ->
     call_op("rem(", Left, Right, Ctx);
 pp({op, _, '!', Left, Right}, Ctx) ->
     call_op("send(", Left, Right, Ctx);
+% or/and in guards are compiled to elixir or/and (right side not evaluated)
+% since guards should not have side effects and the result should be almost the
+% same (unless the right side throws and the guard evaluates to false?)
+pp({op, Line, 'or', Left, Right}, Ctx = #ctxt{in_guard = true}) ->
+    pp({op, Line, 'orelse', Left, Right}, Ctx);
+pp({op, Line, 'and', Left, Right}, Ctx = #ctxt{in_guard = true}) ->
+    pp({op, Line, 'andalso', Left, Right}, Ctx);
 pp({op, Line, Op, Left, Right}, Ctx) ->
     case is_erlang_op(Op) of
         true ->
@@ -827,20 +838,27 @@ pp_call_fn_name(V) ->
             end
     end.
 
-should_quote_def_fn_name("in") -> true;
-should_quote_def_fn_name("and") -> true;
-should_quote_def_fn_name("or") -> true;
-should_quote_def_fn_name("nil") -> true;
-should_quote_def_fn_name("not") -> true;
+should_quote_def_fn_name("in") ->
+    true;
+should_quote_def_fn_name("and") ->
+    true;
+should_quote_def_fn_name("or") ->
+    true;
+should_quote_def_fn_name("nil") ->
+    true;
+should_quote_def_fn_name("not") ->
+    true;
 should_quote_def_fn_name(Name) ->
-        should_quote_atom_str(Name).
+    should_quote_atom_str(Name).
 
-identity(V) -> V.
+identity(V) ->
+    V.
 
 pp_args([], _Ctx, _PPFun) ->
     text("()");
 pp_args(Args, Ctx, PPFun) ->
-    beside(oparen_f(), beside(pp_args_inn(Args, Ctx, PPFun, fun identity/1), cparen_f())).
+    beside(oparen_f(),
+           beside(pp_args_inn(Args, Ctx, PPFun, fun identity/1), cparen_f())).
 
 quote_atom(V) ->
     text(quote_atom_raw(V)).
@@ -999,10 +1017,12 @@ pp_for(Gens, Ctx, BodyL) ->
           above(nestc(Ctx, BodyL), text("end"))).
 
 pp_bfor(Gens, Ctx, BodyL) ->
-    above(besidel([text("for "), pp_lc_gens(Gens, Ctx), text(", into: <<>> do")]),
+    above(besidel([text("for "),
+                   pp_lc_gens(Gens, Ctx),
+                   text(", into: <<>> do")]),
           above(nestc(Ctx, BodyL), text("end"))).
 
-pp_lc_gens(Gens=[Filter | _], Ctx)
+pp_lc_gens(Gens = [Filter | _], Ctx)
     when element(1, Filter) =/= generate andalso
              element(1, Filter) =/= b_generate ->
     Line = element(2, Filter),
@@ -1026,13 +1046,21 @@ pp_lc_gen({b_generate, _, Left, Right}, Ctx) ->
 pp_lc_gen(Filter, Ctx) ->
     pp_oper(Filter, Ctx).
 
-% TODO: precedence
 pp_guards(Guards, Ctx) ->
+    pp_guards_h(Guards, enter_guard(Ctx)).
+
+pp_guards_h([SGuards], Ctx) ->
+    pp_guard(SGuards, Ctx);
+pp_guards_h(Guards, Ctx) ->
     join(Guards, Ctx, fun pp_guard/2, text(" or")).
 
-% TODO: precedence
+pp_guard([SGuard], Ctx) ->
+    pp_sguard(SGuard, Ctx);
 pp_guard(SGuards, Ctx) ->
-    join(SGuards, Ctx, fun pp/2, text(" and")).
+    wrap_parens(join(SGuards, Ctx, fun pp_sguard/2, text(" and"))).
+
+pp_sguard(SGuard, Ctx) ->
+    pp(SGuard, Ctx).
 
 pp_bin_es(Es, Ctx) ->
     join(Es, Ctx, fun pp_bin_e/2, comma_f()).
@@ -1133,7 +1161,8 @@ pp_record_field_decl({record_field, L1, {atom, L2, Name}}, Ctx) ->
                          Ctx);
 pp_record_field_decl({record_field, _, {atom, _, Name}, {record, _, _, _}},
                      _Ctx) ->
-    besidel([text(quote_record_field(Name)), text(": :EFE_TODO_NESTED_RECORD")]);
+    besidel([text(quote_record_field(Name)),
+             text(": :EFE_TODO_NESTED_RECORD")]);
 pp_record_field_decl({record_field, _, {atom, _, Name}, Default}, Ctx) ->
     besidel([text(quote_record_field(Name)), text(": "), pp(Default, Ctx)]).
 
@@ -1545,12 +1574,18 @@ is_autoimported(spawn_opt, 4) ->
     true;
 is_autoimported(spawn_opt, 5) ->
     true;
-is_autoimported(spawn_request, 1) -> true;
-is_autoimported(spawn_request, 2) -> true;
-is_autoimported(spawn_request, 3) -> true;
-is_autoimported(spawn_request, 4) -> true;
-is_autoimported(spawn_request, 5) -> true;
-is_autoimported(spawn_request_abandon, 1) -> true;
+is_autoimported(spawn_request, 1) ->
+    true;
+is_autoimported(spawn_request, 2) ->
+    true;
+is_autoimported(spawn_request, 3) ->
+    true;
+is_autoimported(spawn_request, 4) ->
+    true;
+is_autoimported(spawn_request, 5) ->
+    true;
+is_autoimported(spawn_request_abandon, 1) ->
+    true;
 is_autoimported(split_binary, 2) ->
     true;
 is_autoimported(term_to_binary, 1) ->
@@ -1979,23 +2014,28 @@ deduplicate_list([H | T], Accum, Seen) ->
 ueval(Ast = {op, Line, Op, E}) ->
     case ueval(E) of
         {integer, _, V} ->
-            Res = case Op of
-                '+' -> V;
-                '-' -> -V;
-                'bnot' -> bnot V;
-                          _ -> error
-                  end,
+            Res =
+                case Op of
+                    '+' ->
+                        V;
+                    '-' ->
+                        -V;
+                    'bnot' ->
+                        bnot V;
+                    _ ->
+                        error
+                end,
             case Res of
                 error ->
                     Ast;
                 _ ->
                     {integer, Line, Res}
             end;
-        _ -> Ast
+        _ ->
+            Ast
     end;
- 
 ueval({tuple, Line, Items}) ->
-        {tuple, Line, [ueval(Item) || Item <- Items]};
+    {tuple, Line, [ueval(Item) || Item <- Items]};
 ueval(Ast = {op, Line, Op, EL, ER}) ->
     case {ueval(EL), ueval(ER)} of
         {{integer, _, L}, {integer, _, R}} ->
@@ -2030,7 +2070,8 @@ ueval(Ast = {op, Line, Op, EL, ER}) ->
                 _ ->
                     {integer, Line, Res}
             end;
-        _ -> Ast
+        _ ->
+            Ast
     end;
 ueval(Ast) ->
     Ast.

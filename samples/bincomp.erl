@@ -56,10 +56,9 @@ bin_literal_str(<<"//"/utf8, Rest/binary>>) ->
     Rest.
 
 ascii_to_lower(String) ->
-    << <<(if $A =< C, C =< $Z ->
-                  C + ($a - $A);
-             true ->
-                  C
-          end)>>
-       ||
-        <<C>> <= iolist_to_binary(String) >>.
+    << <<if $A =< C, C =< $Z ->
+                C + ($a - $A);
+            true ->
+                C
+         end>>
+       || <<C>> <= iolist_to_binary(String) >>.
