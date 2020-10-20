@@ -56,6 +56,9 @@ from_erl(Path) ->
     Encoding = latin1,
     epp:parse_file(Path,
                    [{includes, [PathDir | IncludePaths]},
+                    {macros,
+                     [{'VSN', 'EFE_TODO_VSN_MACRO'},
+                      {'COMPILER_VSN', 'EFE_TODO_COMPILER_VSN_MACRO'}]},
                     {default_encoding, Encoding}]).
 
 pprint_ex(Path, DoPrint) ->
