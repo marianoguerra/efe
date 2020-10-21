@@ -1801,7 +1801,9 @@ op_to_erlang_call(Line, Op, Args, Ctx) ->
 
 p_rec_name(RecName) ->
     Name = a2l(RecName),
-    text(string:replace(["r_" | Name], "-", "_", all)).
+    Name1 = string:replace(["r_" | Name], "-", "_", all),
+    Name2 = string:replace(Name1, "$", "_", all),
+    text(Name2).
 
 format_non_printable_char(0) ->
     "?\\0";
