@@ -15,3 +15,6 @@ otp-compile: build
 format-output:
 	@cd out && for f in *.ex; do mix format $$f; done
 
+filter-result:
+	@grep -v '^# ' out/result.txt | grep -v '== Compilation error in file' | grep -v '(elixir ' | grep -v '(stdlib 3' | sed 's/** (CompileError) //;s/** (SyntaxError) //'
+
