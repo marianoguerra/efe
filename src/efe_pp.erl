@@ -393,7 +393,7 @@ pp({function, _, Name, Arity, Clauses}, Ctx) ->
     % HACK: force a new line above each top level function
     pp_function_clauses(Clauses, Name, DefKw, Ctx);
 pp({match, _, Left, Right}, Ctx) ->
-    besidel([pp(Left, Ctx), text(" = "), pp(Right, Ctx)]);
+    besidel([pp(Left, Ctx), text(" = "), pp_oper(Right, Ctx)]);
 pp({op, _, 'div', Left, Right}, Ctx) ->
     call_op("div(", Left, Right, Ctx);
 pp({op, _, 'rem', Left, Right}, Ctx) ->
@@ -499,6 +499,8 @@ pp({eof, _}, _Ctx) ->
     empty().
 
 % wrap statements in value position in parenthesis
+pp_oper(Expr = {match, _, _Left, _Right}, Ctx) ->
+    wrap_parens(pp(Expr, Ctx));
 pp_oper(Expr = {lc, _, _Body, _Gens}, Ctx) ->
     wrap_parens(pp(Expr, Ctx));
 pp_oper(Expr = {bc, _, _Body, _Gens}, Ctx) ->
@@ -571,9 +573,6 @@ pp_header_and_body_no_end(Ctx, HeaderLayout, Body) ->
 
 pp_header_and_body(Ctx, HeaderLayout, Body) ->
     above(pp_header_and_body_no_end(Ctx, HeaderLayout, Body), endk()).
-
-pp_attr_fun_list(Prefix, Funs, Ctx) ->
-    besidel([text(Prefix), join(Funs, Ctx, fun pp_fn_ref/2, comma_f())]).
 
 gen_attr(Attr, V) when is_atom(V) ->
     text("@" ++ a2l(Attr) ++ " " ++ quote_atom_raw(V));
@@ -723,9 +722,6 @@ wrap_list(Items) ->
 
 wrap(Items, Open, Close) ->
     beside(Open, beside(Items, Close)).
-
-pp_fn_ref({FNameAtom, Arity}, _Ctx) ->
-    text("&" ++ a2l(FNameAtom) ++ "/" ++ arity_to_list(Arity)).
 
 pp_fn_import_ref({FNameAtom, Arity}, _Ctx) ->
     text("" ++ a2l(FNameAtom) ++ ": " ++ arity_to_list(Arity)).
@@ -1712,6 +1708,8 @@ should_prefix_erlang_call({call, _, _, _}, _Arity) ->
     false;
 should_prefix_erlang_call({record_field, _, _RecExpr, _RecName, _Field},
                           _Arity) ->
+    false;
+should_prefix_erlang_call({named_fun, _, _AName, _Clauses}, _Arity) ->
     false.
 
 should_prefix_call({atom, _, alias}, _, _Ctx) ->

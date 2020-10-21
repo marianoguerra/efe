@@ -6,7 +6,7 @@
          escape_str_interpolation/0, printable_chars/0, wrap_stmt/1,
          local_calls_qualified/2, '+~+'/0, alias/2, def/2, call_conflict/0,
          in/3, encoding/0, module_info_calls/0, or_in_guard/1,
-         guard_presedence/1, macros/0]).
+         guard_presedence/1, macros/0, template_cols/1]).
 
 % on_load is private
 -on_load on_load/0.
@@ -173,3 +173,10 @@ guard_presedence(A) when A == 1, A == 2; A == 3 ->
 
 macros() ->
     {?VSN, ?COMPILER_VSN}.
+
+template_cols(ColumnClasses) ->
+    lists:sort([{{IdNo, Col}, lists:usort(Cs)}
+                || Class <- ColumnClasses,
+                   {IdNo, Col} <- Class,
+                   IdNo =/= 1,
+                   [] =/= (Cs = [C || {1, C} <- Class])]).

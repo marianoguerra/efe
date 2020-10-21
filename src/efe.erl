@@ -68,7 +68,11 @@ pprint_ex(Path, DoPrint) ->
                 {AnnAst, _St} = efe_var_ann:do(Ast),
                 case DoPrint of
                     true ->
-                        io:format("~s~n", [efe_pp:format(AnnAst)]);
+                        Code =
+                            unicode:characters_to_binary(efe_pp:format(AnnAst),
+                                                         latin1,
+                                                         utf8),
+                        io:format("~s~n", [Code]);
                     false ->
                         ok
                 end
