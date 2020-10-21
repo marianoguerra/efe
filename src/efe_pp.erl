@@ -116,13 +116,15 @@ add_functions([_ | T], Ctx) ->
 maybe_ignore_kernel_fns(Ctx = #ctxt{imports = Is, functions = Fs}) ->
     Fns = maps:keys(Is) ++ maps:keys(Fs),
     Except = [{Name, Arity} || {Name, Arity} <- Fns, is_kernel_fn(Name, Arity)],
+    ImportLines = pp_imports(Is, Ctx),
     case Except of
         [] ->
-            empty();
+            ImportLines;
         _ ->
-            besidel([text("import Kernel, except: ["),
-                     join(Except, Ctx, fun pp_fn_import_ref/2, comma_f()),
-                     text("]")])
+            above(besidel([text("import Kernel, except: ["),
+                           join(Except, Ctx, fun pp_fn_import_ref/2, comma_f()),
+                           text("]")]),
+                  ImportLines)
     end.
 
 pp_mod([], _Ctx) ->
@@ -211,16 +213,9 @@ pp({attribute, _, Attr = date, V}, _Ctx) ->
     gen_attr(Attr, V);
 pp({attribute, _, Attr = vc, V}, _Ctx) ->
     gen_attr(Attr, V);
-pp({attribute, _, import, {ModNameAtom, Imports}}, Ctx) ->
-    beside(text("import "),
-           followc(Ctx,
-                   besidel([text(":" ++ a2l(ModNameAtom)),
-                            comma_f(),
-                            text(" only:")]),
-                   wrap_list(join(deduplicate_list(Imports),
-                                  Ctx,
-                                  fun pp_fn_import_ref/2,
-                                  comma_f()))));
+pp({attribute, _, import, {_ModNameAtom, _Imports}}, _Ctx) ->
+    % ignored here since they are coalesced by module and inserted before
+    empty();
 % TODO:
 pp({attribute, _, export_type, _Exports}, _Ctx) ->
     % pp_attr_fun_list("@export_type ", Exports, Ctx);
@@ -2075,3 +2070,27 @@ ueval(Ast = {op, Line, Op, EL, ER}) ->
     end;
 ueval(Ast) ->
     Ast.
+
+pp_imports(Is, Ctx) ->
+    ByMod =
+        lists:foldl(fun ({{FName, Arity}, #{mod := Mod}}, ByModIn) ->
+                            ModImports = maps:get(Mod, ByModIn, []),
+                            maps:put(Mod,
+                                     [{FName, Arity} | ModImports],
+                                     ByModIn)
+                    end,
+                    #{},
+                    maps:to_list(Is)),
+
+    abovel([pp_import(Mod, lists:sort(ModImports), Ctx)
+            || {Mod, ModImports} <- lists:sort(maps:to_list(ByMod))]).
+
+pp_import(Mod, Imports, Ctx) ->
+    beside(text("import "),
+           followc(Ctx,
+                   besidel([text(":" ++ a2l(Mod)), comma_f(), text(" only:")]),
+                   %  deduplicate is not needed because of how we accumulate
+                   wrap_list(join(deduplicate_list(Imports),
+                                  Ctx,
+                                  fun pp_fn_import_ref/2,
+                                  comma_f())))).
