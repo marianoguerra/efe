@@ -18,3 +18,5 @@ format-output:
 filter-result:
 	@grep -v '^# ' out/result.txt | grep -v '== Compilation error in file' | grep -v '(elixir ' | grep -v '(stdlib 3' | sed 's/** (CompileError) //;s/** (SyntaxError) //'
 
+conf-test: build
+	./efe conf otp.conf otplib/stdlib/src/lists.erl otplib/stdlib/src/array.erl

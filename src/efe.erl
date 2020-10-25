@@ -8,15 +8,27 @@
 %%====================================================================
 
 %% escript Entry point
-main(["pp", Path]) ->
-    pprint_ex(Path, true);
-main(["ppe", Path]) ->
-    pprint_ex(Path, false);
-main(["ann", Path]) ->
-    {Ast, _St} = annotate(Path),
-    pprint({ok, Ast});
+main(["pp", ConfPath | FilePaths]) ->
+    each_config_and_path(ConfPath,
+                         FilePaths,
+                         fun (Config, FilePath) ->
+                                 pprint_ex(FilePath, true, Config)
+                         end);
+main(["ann", ConfPath | FilePaths]) ->
+    each_config_and_path(ConfPath,
+                         FilePaths,
+                         fun (Config, FilePath) ->
+                                 {Ast, _St} = annotate(FilePath, Config),
+                                 pprint({ok, Ast})
+                         end);
+main(["conf", ConfPath | FilePaths]) ->
+    each_config_and_path(ConfPath,
+                         FilePaths,
+                         fun (Config, FilePath) ->
+                                 io:format("~p: ~p~n~n", [FilePath, Config])
+                         end);
 main(_) ->
-    io:format("Usage: efe pp <path.erl>"),
+    io:format("Usage: efe pp|ann|conf path.erl+"),
     erlang:halt(0).
 
 %%====================================================================
@@ -28,8 +40,8 @@ pprint({ok, R}) ->
 pprint({error, E}) ->
     io:format("Error: ~p~n", [E]).
 
-with_ast(Path, Fn) ->
-    case from_erl(Path) of
+with_ast(Path, Config, Fn) ->
+    case from_erl(Path, Config) of
         {ok, Ast} ->
             try
                 Fn(Ast)
@@ -42,27 +54,25 @@ with_ast(Path, Fn) ->
             Other
     end.
 
-annotate(Path) ->
+annotate(Path, Config) ->
     with_ast(Path,
+             Config,
              fun (Ast) ->
                      efe_var_ann:do(Ast)
              end).
 
-from_erl(Path) ->
+from_erl(Path,
+         #{encoding := Encoding, includes := Includes, macros := Macros}) ->
     PathDir = filename:dirname(Path),
-    IncludePaths =
-        filelib:wildcard(filename:join([PathDir, "../../*/include"])) ++
-            filelib:wildcard(filename:join([PathDir, "../../*/src"])),
+    IncludePaths = [filelib:wildcard(IncludeBlob) || IncludeBlob <- Includes],
     Encoding = latin1,
     epp:parse_file(Path,
                    [{includes, [PathDir | IncludePaths]},
-                    {macros,
-                     [{'VSN', 'EFE_TODO_VSN_MACRO'},
-                      {'COMPILER_VSN', 'EFE_TODO_COMPILER_VSN_MACRO'}]},
+                    {macros, Macros},
                     {default_encoding, Encoding}]).
 
-pprint_ex(Path, DoPrint) ->
-    case from_erl(Path) of
+pprint_ex(Path, DoPrint, Config = #{output_path := OutputPath}) ->
+    case from_erl(Path, Config) of
         {ok, Ast} ->
             try
                 {AnnAst, _St} = efe_var_ann:do(Ast),
@@ -72,7 +82,20 @@ pprint_ex(Path, DoPrint) ->
                             unicode:characters_to_binary(efe_pp:format(AnnAst),
                                                          latin1,
                                                          utf8),
-                        io:format("~s~n", [Code]);
+                        case filelib:ensure_dir(OutputPath) of
+                            ok ->
+                                case file:write_file(OutputPath, Code) of
+                                    ok ->
+                                        io:format("# ~s~n", [OutputPath]),
+                                        ok;
+                                    {error, Reason} ->
+                                        io:format("Error writing file: ~p ~p~n",
+                                                  [Reason, OutputPath])
+                                end;
+                            {error, Reason} ->
+                                io:format("Error creating file path: ~p ~p~n",
+                                          [Reason, OutputPath])
+                        end;
                     false ->
                         ok
                 end
@@ -84,3 +107,35 @@ pprint_ex(Path, DoPrint) ->
         Other ->
             io:format("Error: ~p~n", [Other])
     end.
+
+config_for_path(ConfPath, FilePath) ->
+    {ok, [ConfigMap]} = file:consult(ConfPath),
+    FileDir = filename:dirname(FilePath),
+    BaseName = filename:basename(FilePath, ".erl"),
+    DesfFileName = BaseName ++ ".ex",
+    Encoding = maps:get(encoding, ConfigMap, latin1),
+    MacrosMap = maps:get(macros, ConfigMap, #{}),
+    Macros = maps:to_list(MacrosMap),
+    OutputDir = maps:get(output_dir, ConfigMap, "."),
+    OutputPath = filename:join([OutputDir, FileDir, DesfFileName]),
+    IncludeBlobs = maps:get(includes, ConfigMap, []),
+    Includes =
+        [canonicalize_include_blob(FileDir, Include)
+         || Include <- IncludeBlobs],
+    #{encoding => Encoding,
+      macros => Macros,
+      includes => Includes,
+      output_dir => OutputDir,
+      output_path => OutputPath}.
+
+canonicalize_include_blob(FileDir, Include = [$. | _]) ->
+    filename:join([FileDir, Include]);
+canonicalize_include_blob(_FileDir, Include) ->
+    Include.
+
+each_config_and_path(_ConfPath, [], _Fn) ->
+    ok;
+each_config_and_path(ConfPath, [FilePath | FilePaths], Fn) ->
+    Config = config_for_path(ConfPath, FilePath),
+    Fn(Config, FilePath),
+    each_config_and_path(ConfPath, FilePaths, Fn).
