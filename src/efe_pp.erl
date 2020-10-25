@@ -65,12 +65,12 @@ layout(V, Ctx) ->
     pp(V, Ctx).
 
 format(V) ->
-        format(V, #{}).
+    format(V, #{}).
 
 format(V, Opts) ->
-        Ctx0 = default_ctx(),
-        ModPrefix = maps:get(mod_prefix, Opts, ""),
-        Ctx = Ctx0#ctxt{mod_prefix = ModPrefix},
+    Ctx0 = default_ctx(),
+    ModPrefix = maps:get(mod_prefix, Opts, ""),
+    Ctx = Ctx0#ctxt{mod_prefix = ModPrefix},
 
     prettypr:format(layout(V, Ctx), ?PAPER, ?RIBBON).
 

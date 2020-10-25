@@ -63,14 +63,16 @@ annotate(Path, Config) ->
 
 from_erl(Path,
          #{encoding := Encoding, includes := Includes, macros := Macros}) ->
-    PathDir = filename:dirname(Path),
-    IncludePaths = [filelib:wildcard(IncludeBlob) || IncludeBlob <- Includes],
+    IncludePaths =
+        flatten1([filelib:wildcard(IncludeBlob) || IncludeBlob <- Includes]),
     epp:parse_file(Path,
-                   [{includes, [PathDir | IncludePaths]},
+                   [{includes, IncludePaths},
                     {macros, Macros},
                     {default_encoding, Encoding}]).
 
-pprint_ex(Path, DoPrint, Config = #{output_path := OutputPath, mod_prefix := ModPrefix}) ->
+pprint_ex(Path,
+          DoPrint,
+          Config = #{output_path := OutputPath, mod_prefix := ModPrefix}) ->
     case from_erl(Path, Config) of
         {ok, Ast} ->
             try
@@ -78,7 +80,10 @@ pprint_ex(Path, DoPrint, Config = #{output_path := OutputPath, mod_prefix := Mod
                 case DoPrint of
                     true ->
                         Code =
-                            unicode:characters_to_binary(efe_pp:format(AnnAst, #{mod_prefix => ModPrefix}),
+                            unicode:characters_to_binary(efe_pp:format(AnnAst,
+                                                                       #{mod_prefix
+                                                                             =>
+                                                                             ModPrefix}),
                                                          latin1,
                                                          utf8),
                         case filelib:ensure_dir(OutputPath) of
@@ -117,7 +122,8 @@ config_for_path(ConfPath, FilePath) ->
     MacrosMap = maps:get(macros, ConfigMap, #{}),
     Macros = maps:to_list(MacrosMap),
     OutputDir = maps:get(output_dir, ConfigMap, "."),
-    OutputPath = filename:join([OutputDir, make_relative(FileDir), DesfFileName]),
+    OutputPath =
+        filename:join([OutputDir, make_relative(FileDir), DesfFileName]),
     IncludeBlobs = maps:get(includes, ConfigMap, []),
     Includes =
         [canonicalize_include_blob(FileDir, Include)
@@ -141,5 +147,20 @@ each_config_and_path(ConfPath, [FilePath | FilePaths], Fn) ->
     Fn(Config, FilePath),
     each_config_and_path(ConfPath, FilePaths, Fn).
 
-make_relative(Path=[$/ | _]) -> ["." | Path];
-make_relative(Path) -> Path.
+make_relative(Path = [$/ | _]) ->
+    ["." | Path];
+make_relative(Path) ->
+    Path.
+
+flatten1(L) ->
+    flatten1(L, []).
+
+flatten1([], Accum) ->
+    lists:reverse(Accum);
+flatten1([HL | T], Accum) ->
+    flatten1(T, flatten1_h(HL, Accum)).
+
+flatten1_h([], Accum) ->
+    Accum;
+flatten1_h([H | T], Accum) ->
+    flatten1_h(T, [H | Accum]).
