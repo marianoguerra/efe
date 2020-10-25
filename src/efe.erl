@@ -117,7 +117,7 @@ config_for_path(ConfPath, FilePath) ->
     MacrosMap = maps:get(macros, ConfigMap, #{}),
     Macros = maps:to_list(MacrosMap),
     OutputDir = maps:get(output_dir, ConfigMap, "."),
-    OutputPath = filename:join([OutputDir, FileDir, DesfFileName]),
+    OutputPath = filename:join([OutputDir, make_relative(FileDir), DesfFileName]),
     IncludeBlobs = maps:get(includes, ConfigMap, []),
     Includes =
         [canonicalize_include_blob(FileDir, Include)
@@ -139,3 +139,6 @@ each_config_and_path(ConfPath, [FilePath | FilePaths], Fn) ->
     Config = config_for_path(ConfPath, FilePath),
     Fn(Config, FilePath),
     each_config_and_path(ConfPath, FilePaths, Fn).
+
+make_relative(Path=[$/ | _]) -> ["." | Path];
+make_relative(Path) -> Path.
