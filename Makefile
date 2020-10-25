@@ -6,14 +6,14 @@ build:
 	rebar3 escriptize
 	cp _build/default/bin/efe .
 
-otp-test: build
+translate-otp: build
 	./efe pp otp.conf otplib/*/src/*.erl
 
-otp-compile: build
-	@cd out && for f in **/*.ex; do echo "# $$f" >> result.txt; elixirc $$f >> result.txt; done
+compile-output: build
+	./run.bash compile-output
 
 format-output:
-	@cd out && for f in **/*.ex; do mix format $$f; done
+	./run.bash format-output
 
 filter-result:
 	@grep -v '^# ' out/result.txt | grep -v '== Compilation error in file' | grep -v '(elixir ' | grep -v '(stdlib 3' | sed 's/** (CompileError) //;s/** (SyntaxError) //'
