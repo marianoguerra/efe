@@ -14,7 +14,7 @@
 
 -module(efe_pp).
 
--export([format/1, layout/1]).
+-export([format/1, format/2, layout/1]).
 
 -import(prettypr,
         [sep/1,
@@ -48,7 +48,7 @@
          in_guard = false,
          record_imported = false,
          stacktrace_varname = nil,
-         mod_prefix = "m_",
+         mod_prefix = "",
          break_indent = 4 :: non_neg_integer(),
          paper = ?PAPER :: integer(),
          ribbon = ?RIBBON :: integer()}).
@@ -65,7 +65,14 @@ layout(V, Ctx) ->
     pp(V, Ctx).
 
 format(V) ->
-    prettypr:format(layout(V), ?PAPER, ?RIBBON).
+        format(V, #{}).
+
+format(V, Opts) ->
+        Ctx0 = default_ctx(),
+        ModPrefix = maps:get(mod_prefix, Opts, ""),
+        Ctx = Ctx0#ctxt{mod_prefix = ModPrefix},
+
+    prettypr:format(layout(V, Ctx), ?PAPER, ?RIBBON).
 
 default_ctx() ->
     #ctxt{}.

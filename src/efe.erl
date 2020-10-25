@@ -65,13 +65,12 @@ from_erl(Path,
          #{encoding := Encoding, includes := Includes, macros := Macros}) ->
     PathDir = filename:dirname(Path),
     IncludePaths = [filelib:wildcard(IncludeBlob) || IncludeBlob <- Includes],
-    Encoding = latin1,
     epp:parse_file(Path,
                    [{includes, [PathDir | IncludePaths]},
                     {macros, Macros},
                     {default_encoding, Encoding}]).
 
-pprint_ex(Path, DoPrint, Config = #{output_path := OutputPath}) ->
+pprint_ex(Path, DoPrint, Config = #{output_path := OutputPath, mod_prefix := ModPrefix}) ->
     case from_erl(Path, Config) of
         {ok, Ast} ->
             try
@@ -79,7 +78,7 @@ pprint_ex(Path, DoPrint, Config = #{output_path := OutputPath}) ->
                 case DoPrint of
                     true ->
                         Code =
-                            unicode:characters_to_binary(efe_pp:format(AnnAst),
+                            unicode:characters_to_binary(efe_pp:format(AnnAst, #{mod_prefix => ModPrefix}),
                                                          latin1,
                                                          utf8),
                         case filelib:ensure_dir(OutputPath) of
@@ -114,6 +113,7 @@ config_for_path(ConfPath, FilePath) ->
     BaseName = filename:basename(FilePath, ".erl"),
     DesfFileName = BaseName ++ ".ex",
     Encoding = maps:get(encoding, ConfigMap, latin1),
+    ModPrefix = maps:get(mod_prefix, ConfigMap, ""),
     MacrosMap = maps:get(macros, ConfigMap, #{}),
     Macros = maps:to_list(MacrosMap),
     OutputDir = maps:get(output_dir, ConfigMap, "."),
@@ -126,7 +126,8 @@ config_for_path(ConfPath, FilePath) ->
       macros => Macros,
       includes => Includes,
       output_dir => OutputDir,
-      output_path => OutputPath}.
+      output_path => OutputPath,
+      mod_prefix => ModPrefix}.
 
 canonicalize_include_blob(FileDir, Include = [$. | _]) ->
     filename:join([FileDir, Include]);
