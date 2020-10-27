@@ -20,4 +20,8 @@ rebar3.crashdump
 out
 .tool-versions
 efe
-otplib
+otp
+cowboy
+cowlib
+TODO.txt
+errors*.txt
