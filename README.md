@@ -8,6 +8,7 @@ An escript
 
 ```sh
 rebar3 escriptize
+cp _build/default/bin/efe .
 ```
 
 ## Run
