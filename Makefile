@@ -7,7 +7,7 @@ build:
 	cp _build/default/bin/efe .
 
 translate-otp: build
-	./efe pp otp.conf otplib/*/src/*.erl
+	./efe pp otp.conf otp/lib/*/src/*.erl otp/erts/preloaded/src/*.erl
 
 compile-output: build
 	./run.bash compile-output

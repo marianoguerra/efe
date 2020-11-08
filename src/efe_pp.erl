@@ -1723,6 +1723,10 @@ should_prefix_call({atom, _, alias}, _, _Ctx) ->
     {true, {var, '__MODULE__'}};
 should_prefix_call({atom, _, def}, _, _Ctx) ->
     {true, {var, '__MODULE__'}};
+should_prefix_call({atom, _, in}, _, _Ctx) ->
+    {true, {var, '__MODULE__'}};
+should_prefix_call({atom, _, nil}, _, _Ctx) ->
+    {true, {var, '__MODULE__'}};
 should_prefix_call({atom, _, module_info}, 0, _Ctx) ->
     {true, {var, '__MODULE__'}};
 should_prefix_call({atom, _, module_info}, 1, _Ctx) ->
