@@ -836,16 +836,22 @@ pp_call_fn_name(V) ->
             end
     end.
 
-should_quote_def_fn_name("in") ->
-    true;
-should_quote_def_fn_name("and") ->
-    true;
-should_quote_def_fn_name("or") ->
-    true;
-should_quote_def_fn_name("nil") ->
-    true;
-should_quote_def_fn_name("not") ->
-    true;
+% https://hexdocs.pm/elixir/syntax-reference.html#reserved-words
+should_quote_def_fn_name("true") -> true;
+should_quote_def_fn_name("false") -> true;
+should_quote_def_fn_name("nil") -> true;
+should_quote_def_fn_name("when") -> true;
+should_quote_def_fn_name("and") -> true;
+should_quote_def_fn_name("or") -> true;
+should_quote_def_fn_name("not") -> true;
+should_quote_def_fn_name("in") -> true;
+should_quote_def_fn_name("fn") -> true;
+should_quote_def_fn_name("do") -> true;
+should_quote_def_fn_name("end") -> true;
+should_quote_def_fn_name("catch") -> true;
+should_quote_def_fn_name("rescue") -> true;
+should_quote_def_fn_name("after") -> true;
+should_quote_def_fn_name("else") -> true;
 should_quote_def_fn_name(Name) ->
     should_quote_atom_str(Name).
 
