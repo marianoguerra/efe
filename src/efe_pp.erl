@@ -610,7 +610,7 @@ maybe_quote_atom_str(Chars) ->
     end.
 
 should_quote_atom_str(Chars) ->
-    case re:run(Chars, "^[a-zA-Z_][a-zA-Z0-9@_]*$") of
+    case re:run(Chars, "^[a-zA-Z_][a-zA-Z0-9@_]*[?!]?$") of
         nomatch ->
             true;
         {match, _} ->
