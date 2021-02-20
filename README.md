@@ -11,7 +11,7 @@ Here's a blogpost with more details: http://marianoguerra.org/posts/elixir-flavo
 
 ```sh
 rebar3 escriptize
-cp _build/default/bin/efe .
+ln _build/default/bin/efe .
 ```
 
 ## Run
