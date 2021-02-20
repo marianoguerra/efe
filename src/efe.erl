@@ -28,7 +28,7 @@ main(["conf", ConfPath | FilePaths]) ->
                                  io:format("~p: ~p~n~n", [FilePath, Config])
                          end);
 main(_) ->
-    io:format("Usage: efe pp|ann|conf path.erl+"),
+    io:format("Usage: efe pp|ann|conf path.erl+~n"),
     erlang:halt(0).
 
 %%====================================================================
