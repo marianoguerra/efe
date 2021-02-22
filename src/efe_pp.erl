@@ -867,31 +867,25 @@ pp_args(Args, Ctx, PPFun) ->
 quote_atom(V) ->
     text(quote_atom_raw(V)).
 
-pp_cons(V, Ctx) ->
-    case cons_to_list(V, []) of
-        [A | B] when not is_list(A), not is_list(B) ->
-            wrap_list(followc(Ctx, beside(pp(A, Ctx), text(" |")), pp(B, Ctx)));
-        [A | B] when not is_list(B) ->
-            wrap_list(followc(Ctx,
-                              beside(wrap_list(pp_items(A, Ctx)), text(" |")),
-                              pp(B, Ctx)));
-        L ->
-            wrap_list(pp_items(L, Ctx))
-    end.
+sep_for_tail({cons, _, _, _}) ->
+        text(",");
+sep_for_tail(_) ->
+        text(" |").
+
+pp_cons({cons, _, H, {nil, _}}, Ctx) ->
+        wrap_list(pp(H, Ctx));
+pp_cons({cons, _, H, T}, Ctx) ->
+        wrap_list(followc(Ctx, beside(pp(H, Ctx), sep_for_tail(T)), pp_cons_tail(T, Ctx))).
+
+pp_cons_tail({cons, _, H, {nil, _}}, Ctx) ->
+        pp(H, Ctx);
+pp_cons_tail({cons, _, H, T}, Ctx) ->
+        followc(Ctx, beside(pp(H, Ctx), sep_for_tail(T)), pp_cons_tail(T, Ctx));
+pp_cons_tail(V, Ctx) ->
+        pp(V, Ctx).
 
 pp_items(Items, Ctx) ->
     join(Items, Ctx, fun pp/2, comma_f()).
-
-cons_to_list({cons, _, H, {nil, _}}, Accum) ->
-    % proper list tail
-    lists:reverse([H | Accum]);
-cons_to_list({cons, _, H, T = {cons, _, _, _}}, Accum) ->
-    cons_to_list(T, [H | Accum]);
-cons_to_list({cons, _, H, T}, []) ->
-    [H | T];
-cons_to_list({cons, _, H, T}, Accum) ->
-    % improper list
-    [lists:reverse([H | Accum]) | T].
 
 list_to_cons([], Line) ->
     {nil, Line};

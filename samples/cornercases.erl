@@ -6,13 +6,17 @@
          escape_str_interpolation/0, printable_chars/0, wrap_stmt/1,
          local_calls_qualified/2, '+~+'/0, alias/2, def/2, call_conflict/0,
          in/3, encoding/0, module_info_calls/0, or_in_guard/1,
-         guard_presedence/1, macros/0, template_cols/1, keyword_methods/0]).
+         guard_presedence/1, macros/0, template_cols/1, keyword_methods/0,
+         cons/1]).
 
 % on_load is private
 -on_load on_load/0.
 
 % duplicated import
 -import(foo, [to_string/1, to_string/1]).
+
+cons(["pp", A | B]) ->
+    {A, B}.
 
 send(A, B) ->
     A ! B.

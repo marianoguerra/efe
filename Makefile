@@ -20,3 +20,9 @@ filter-result:
 
 conf-test: build
 	./efe conf otp.conf otplib/stdlib/src/lists.erl otplib/stdlib/src/array.erl
+
+cons-test: build
+	./efe pp samples.conf samples/cons.erl
+	@cat samples/cons.erl
+	@cat out/samples/cons.ex
+
