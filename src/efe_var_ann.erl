@@ -40,19 +40,19 @@ add_var_if_not_there(S =
                      Name) ->
     % while matching add new vars in different map, when clear_matching is called
     % we merge them in vars
-    case maps:get(Name, Vars, nil) of
-        nil ->
-            NewVars = VarsInMatch#{Name => #{line => Line}},
+    case maps:find(Name, Vars) of
+        error ->
+            NewVars = maps:put(Name, #{line => Line}, VarsInMatch),
             S#{vars_in_match := NewVars};
-        _ ->
+        {ok, _} ->
             S
     end;
 add_var_if_not_there(S = #{vars := Vars}, Line, Name) ->
-    case maps:get(Name, Vars, nil) of
-        nil ->
-            NewVars = Vars#{Name => #{line => Line}},
+    case maps:find(Name, Vars) of
+        error ->
+            NewVars = maps:put(Name, #{line => Line}, Vars),
             S#{vars := NewVars};
-        _ ->
+        {ok, _} ->
             S
     end.
 
