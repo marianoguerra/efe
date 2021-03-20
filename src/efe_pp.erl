@@ -980,7 +980,7 @@ split_map_pairs([H = {map_field_exact, _, _, _} | T], {Assoc, Exact}) ->
 
 pp_pair({Op, _, {atom, _, K}, V}, Ctx)
     when Op =:= map_field_exact orelse Op =:= map_field_assoc ->
-    wrap_pair_no_left_space(Ctx, text(":"), text(a2l(K)), pp(V, Ctx));
+    wrap_pair_no_left_space(Ctx, text(":"), text(quote_record_field(K)), pp(V, Ctx));
 pp_pair({Op, _, K, V}, Ctx)
     when Op =:= map_field_exact orelse Op =:= map_field_assoc ->
     wrap_pair(Ctx, arrow_f(), pp(K, Ctx), pp(V, Ctx)).
