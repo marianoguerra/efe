@@ -356,7 +356,7 @@ pp({map, _, []}, _Ctx) ->
 pp({map, _, Items}, Ctx) ->
     pp_map(Items, Ctx);
 pp({map, _, CurMap, Items}, Ctx) ->
-    wrap_map(sep([pp(CurMap, Ctx), pipe(), pp_map_inner(Items, Ctx)]));
+    pp_map_update(CurMap, Items, Ctx);
 % record_info expansion
 pp({call, _, {atom, _, record_info}, [{atom, _, fields}, {atom, _, RecName}]},
    _Ctx) ->
@@ -837,21 +837,36 @@ pp_call_fn_name(V) ->
     end.
 
 % https://hexdocs.pm/elixir/syntax-reference.html#reserved-words
-should_quote_def_fn_name("true") -> true;
-should_quote_def_fn_name("false") -> true;
-should_quote_def_fn_name("nil") -> true;
-should_quote_def_fn_name("when") -> true;
-should_quote_def_fn_name("and") -> true;
-should_quote_def_fn_name("or") -> true;
-should_quote_def_fn_name("not") -> true;
-should_quote_def_fn_name("in") -> true;
-should_quote_def_fn_name("fn") -> true;
-should_quote_def_fn_name("do") -> true;
-should_quote_def_fn_name("end") -> true;
-should_quote_def_fn_name("catch") -> true;
-should_quote_def_fn_name("rescue") -> true;
-should_quote_def_fn_name("after") -> true;
-should_quote_def_fn_name("else") -> true;
+should_quote_def_fn_name("true") ->
+    true;
+should_quote_def_fn_name("false") ->
+    true;
+should_quote_def_fn_name("nil") ->
+    true;
+should_quote_def_fn_name("when") ->
+    true;
+should_quote_def_fn_name("and") ->
+    true;
+should_quote_def_fn_name("or") ->
+    true;
+should_quote_def_fn_name("not") ->
+    true;
+should_quote_def_fn_name("in") ->
+    true;
+should_quote_def_fn_name("fn") ->
+    true;
+should_quote_def_fn_name("do") ->
+    true;
+should_quote_def_fn_name("end") ->
+    true;
+should_quote_def_fn_name("catch") ->
+    true;
+should_quote_def_fn_name("rescue") ->
+    true;
+should_quote_def_fn_name("after") ->
+    true;
+should_quote_def_fn_name("else") ->
+    true;
 should_quote_def_fn_name(Name) ->
     should_quote_atom_str(Name).
 
@@ -868,21 +883,23 @@ quote_atom(V) ->
     text(quote_atom_raw(V)).
 
 sep_for_tail({cons, _, _, _}) ->
-        text(",");
+    text(",");
 sep_for_tail(_) ->
-        text(" |").
+    text(" |").
 
 pp_cons({cons, _, H, {nil, _}}, Ctx) ->
-        wrap_list(pp(H, Ctx));
+    wrap_list(pp(H, Ctx));
 pp_cons({cons, _, H, T}, Ctx) ->
-        wrap_list(followc(Ctx, beside(pp(H, Ctx), sep_for_tail(T)), pp_cons_tail(T, Ctx))).
+    wrap_list(followc(Ctx,
+                      beside(pp(H, Ctx), sep_for_tail(T)),
+                      pp_cons_tail(T, Ctx))).
 
 pp_cons_tail({cons, _, H, {nil, _}}, Ctx) ->
-        pp(H, Ctx);
+    pp(H, Ctx);
 pp_cons_tail({cons, _, H, T}, Ctx) ->
-        followc(Ctx, beside(pp(H, Ctx), sep_for_tail(T)), pp_cons_tail(T, Ctx));
+    followc(Ctx, beside(pp(H, Ctx), sep_for_tail(T)), pp_cons_tail(T, Ctx));
 pp_cons_tail(V, Ctx) ->
-        pp(V, Ctx).
+    pp(V, Ctx).
 
 pp_items(Items, Ctx) ->
     join(Items, Ctx, fun pp/2, comma_f()).
@@ -907,15 +924,69 @@ pp_map(Items, Ctx) ->
 pp_map_inner(Items, Ctx) ->
     join(Items, Ctx, fun pp_pair/2, comma_f()).
 
-pp_pair({map_field_assoc, _, K, V}, Ctx) ->
-    wrap_pair(Ctx, arrow_f(), pp(K, Ctx), pp(V, Ctx));
-%pp_pair({map_field_exact, _, {atom, _, K}, V}, Ctx) ->
-%    wrap_pair_no_left_space(Ctx, colon_f(), text(a2l(K)), pp(V, Ctx));
-pp_pair({map_field_exact, _, K, V}, Ctx) ->
+pp_map_update(CurMap, Items, Ctx) ->
+    case split_map_pairs(Items, {[], []}) of
+        {[], Exact} ->
+            pp_map_update_exact(CurMap, Exact, Ctx);
+        {[Assoc], []} ->
+            pp_map_update_put(CurMap, Assoc, Ctx);
+        {Assoc, []} ->
+            pp_map_update_merge(CurMap, Assoc, Ctx);
+        {[Assoc], Exact} ->
+            ExactPP = pp_map_update_exact(CurMap, Exact, Ctx),
+            pp_map_update_put_h(ExactPP, Assoc, Ctx);
+        {Assoc, Exact} ->
+            ExactPP = pp_map_update_exact(CurMap, Exact, Ctx),
+            pp_map_update_merge_h(ExactPP, Assoc, Ctx)
+    end.
+
+% %{a: 1, "b" => 2} (one or more updates to current keys)
+pp_map_update_exact(CurMap, Items, Ctx) ->
+    Updates = join(Items, Ctx, fun pp_pair/2, comma_f()),
+    wrap_map(sep([pp(CurMap, Ctx), pipe(), Updates])).
+
+% Map.put(cur_m, key, val)
+pp_map_update_put(CurMap, Assoc, Ctx) ->
+        pp_map_update_put_h(pp(CurMap, Ctx), Assoc, Ctx).
+
+pp_map_update_put_h(CurMapPP, {map_field_assoc, _, K, V}, Ctx) ->
+    besidel([text("Map.put("),
+             CurMapPP,
+             text(", "),
+             join([ K, V], Ctx, fun pp/2, comma_f()),
+             text(")")]).
+
+% Map.merge(cur_m, %{...})
+pp_map_update_merge(CurMap, Items, Ctx) ->
+        pp_map_update_merge_h(pp(CurMap, Ctx), Items, Ctx).
+
+pp_map_update_merge_h(CurMapPP, Items, Ctx) ->
+    Updates = wrap_map(join(Items, Ctx, fun pp_pair/2, comma_f())),
+    besidel([text("Map.merge("),
+             CurMapPP,
+             text(", "),
+             Updates,
+             text(")")]).
+
+split_map_pairs([], {Assoc, Exact}) ->
+    {lists:reverse(Assoc), lists:reverse(Exact)};
+split_map_pairs([H = {map_field_assoc, _, _, _} | T], {Assoc, Exact}) ->
+    split_map_pairs(T, {[H | Assoc], Exact});
+split_map_pairs([H = {map_field_exact, _, _, _} | T], {Assoc, Exact}) ->
+    split_map_pairs(T, {Assoc, [H | Exact]}).
+
+pp_pair({Op, _, {atom, _, K}, V}, Ctx)
+    when Op =:= map_field_exact orelse Op =:= map_field_assoc ->
+    wrap_pair_no_left_space(Ctx, text(":"), text(a2l(K)), pp(V, Ctx));
+pp_pair({Op, _, K, V}, Ctx)
+    when Op =:= map_field_exact orelse Op =:= map_field_assoc ->
     wrap_pair(Ctx, arrow_f(), pp(K, Ctx), pp(V, Ctx)).
 
 wrap_pair(Ctx, Sep, Left, Right) ->
     parc(Ctx, [sep([Left, Sep, Right])]).
+
+wrap_pair_no_left_space(Ctx, Sep, Left, Right) ->
+    parc(Ctx, [sep([besidel([Left, Sep]), Right])]).
 
 %wrap_pair_no_left_space(Ctx, Sep, Left, Right) ->
 %    parc(Ctx, [beside(Left, Sep), Right]).
