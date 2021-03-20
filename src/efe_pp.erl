@@ -926,6 +926,9 @@ pp_map_inner(Items, Ctx) ->
 
 pp_map_update(CurMap, Items, Ctx) ->
     case split_map_pairs(Items, {[], []}) of
+         % https://github.com/erlang/otp/blob/9cc36bfa910f1bfc6fc7e759eb58442020e74039/lib/observer/src/observer_perf_wx.erl#L291
+        {[], []} ->
+            pp(CurMap, Ctx);
         {[], Exact} ->
             pp_map_update_exact(CurMap, Exact, Ctx);
         {[Assoc], []} ->
