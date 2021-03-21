@@ -27,6 +27,12 @@ main(["conf", ConfPath | FilePaths]) ->
                          fun (Config, FilePath) ->
                                  io:format("~p: ~p~n~n", [FilePath, Config])
                          end);
+
+% to make it work when transpiled to elixir, elixir escripts receive args as list
+% of binaries
+main(Args=[H | _]) when is_binary(H) ->
+   main([binary_to_list(V) || V <- Args]); 
+
 main(_) ->
     io:format("Usage: efe pp|ann|conf path.erl+~n"),
     erlang:halt(0).
