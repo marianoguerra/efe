@@ -609,6 +609,9 @@ maybe_quote_atom_str(Chars) ->
             Chars
     end.
 
+should_quote_atom(A) ->
+    should_quote_atom_str(a2l(A)).
+
 should_quote_atom_str(Chars) ->
     case re:run(Chars, "^[a-zA-Z_-][a-zA-Z0-9@_]*[?!]?$") of
         nomatch ->
@@ -795,6 +798,13 @@ pp_call_pos(V = {var, _, _}, _, Ctx) ->
     beside(pp(V, Ctx), text("."));
 pp_call_pos(V = {var, _, _, _}, _, Ctx) ->
     beside(pp(V, Ctx), text("."));
+pp_call_pos({atom, _, V}, "", _Ctx) ->
+    case should_quote_atom(V) of
+        true ->
+            text("unquote(" ++ quote_atom_raw(V) ++ ")");
+        false ->
+            text(pp_call_fn_name(V))
+    end;
 pp_call_pos({atom, _, V}, Prefix, _Ctx) ->
     text(Prefix ++ pp_call_fn_name(V));
 pp_call_pos(V, _, Ctx) ->
@@ -1809,17 +1819,7 @@ should_prefix_call(Ast, Arity, _Ctx) ->
         true ->
             {true, {atom, erlang}};
         false ->
-            case Ast of
-                {atom, _, A} ->
-                    case should_quote_atom_str(a2l(A)) of
-                        true ->
-                            {true, {var, '__MODULE__'}};
-                        false ->
-                            false
-                    end;
-                _ ->
-                    false
-            end
+            false
     end.
 
 is_ex_reserved_varname("nil") ->
