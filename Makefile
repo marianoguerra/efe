@@ -2,6 +2,18 @@
 smoke-test: build
 	./efe pp samples.conf samples/*.erl
 
+lfe-test: lfe-samples build
+	./efe pp-lfe samples.conf samples/*.lfe
+
+lfe-samples: samples/ping_pong.lfe samples/simple-erl-exercises.lfe
+
+samples/ping_pong.lfe:
+	wget https://raw.githubusercontent.com/lfe/lfe/develop/examples/ping_pong.lfe -O samples/ping_pong.lfe
+
+samples/simple-erl-exercises.lfe:
+	wget https://raw.githubusercontent.com/lfe/lfe/develop/examples/simple-erl-exercises.lfe -O samples/simple-erl-exercises.lfe
+
+
 build:
 	rebar3 escriptize
 	cp _build/default/bin/efe .

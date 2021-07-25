@@ -610,7 +610,7 @@ maybe_quote_atom_str(Chars) ->
     end.
 
 should_quote_atom_str(Chars) ->
-    case re:run(Chars, "^[a-zA-Z_][a-zA-Z0-9@_]*[?!]?$") of
+    case re:run(Chars, "^[a-zA-Z_-][a-zA-Z0-9@_]*[?!]?$") of
         nomatch ->
             true;
         {match, _} ->
@@ -926,7 +926,7 @@ pp_map_inner(Items, Ctx) ->
 
 pp_map_update(CurMap, Items, Ctx) ->
     case split_map_pairs(Items, {[], []}) of
-         % https://github.com/erlang/otp/blob/9cc36bfa910f1bfc6fc7e759eb58442020e74039/lib/observer/src/observer_perf_wx.erl#L291
+        % https://github.com/erlang/otp/blob/9cc36bfa910f1bfc6fc7e759eb58442020e74039/lib/observer/src/observer_perf_wx.erl#L291
         {[], []} ->
             pp(CurMap, Ctx);
         {[], Exact} ->
@@ -950,26 +950,22 @@ pp_map_update_exact(CurMap, Items, Ctx) ->
 
 % Map.put(cur_m, key, val)
 pp_map_update_put(CurMap, Assoc, Ctx) ->
-        pp_map_update_put_h(pp(CurMap, Ctx), Assoc, Ctx).
+    pp_map_update_put_h(pp(CurMap, Ctx), Assoc, Ctx).
 
 pp_map_update_put_h(CurMapPP, {map_field_assoc, _, K, V}, Ctx) ->
     besidel([text("Map.put("),
              CurMapPP,
              text(", "),
-             join([ K, V], Ctx, fun pp/2, comma_f()),
+             join([K, V], Ctx, fun pp/2, comma_f()),
              text(")")]).
 
 % Map.merge(cur_m, %{...})
 pp_map_update_merge(CurMap, Items, Ctx) ->
-        pp_map_update_merge_h(pp(CurMap, Ctx), Items, Ctx).
+    pp_map_update_merge_h(pp(CurMap, Ctx), Items, Ctx).
 
 pp_map_update_merge_h(CurMapPP, Items, Ctx) ->
     Updates = wrap_map(join(Items, Ctx, fun pp_pair/2, comma_f())),
-    besidel([text("Map.merge("),
-             CurMapPP,
-             text(", "),
-             Updates,
-             text(")")]).
+    besidel([text("Map.merge("), CurMapPP, text(", "), Updates, text(")")]).
 
 split_map_pairs([], {Assoc, Exact}) ->
     {lists:reverse(Assoc), lists:reverse(Exact)};
@@ -980,7 +976,10 @@ split_map_pairs([H = {map_field_exact, _, _, _} | T], {Assoc, Exact}) ->
 
 pp_pair({Op, _, {atom, _, K}, V}, Ctx)
     when Op =:= map_field_exact orelse Op =:= map_field_assoc ->
-    wrap_pair_no_left_space(Ctx, text(":"), text(quote_record_field(K)), pp(V, Ctx));
+    wrap_pair_no_left_space(Ctx,
+                            text(":"),
+                            text(quote_record_field(K)),
+                            pp(V, Ctx));
 pp_pair({Op, _, K, V}, Ctx)
     when Op =:= map_field_exact orelse Op =:= map_field_assoc ->
     wrap_pair(Ctx, arrow_f(), pp(K, Ctx), pp(V, Ctx)).
@@ -1860,9 +1859,15 @@ a2l(V) ->
     atom_to_list(V).
 
 transform_var_name(V) ->
-    case a2l(V) of
+    transform_var_name_lstr(a2l(V)).
+
+transform_var_name_lstr(V) ->
+    case V of
         L = [$_ | _] ->
             L;
+        % LFE
+        [$- | T] ->
+            transform_lfe_var_name_tail(T, []);
         [H] ->
             string:lowercase([H]);
         [H | T] ->
@@ -1874,6 +1879,19 @@ transform_var_name(V) ->
                     VarName
             end
     end.
+
+% vars seem to all end in -
+transform_lfe_var_name_tail([$-], Accum) ->
+    transform_var_name_lstr(lists:reverse(Accum));
+% in case some don't end in -
+transform_lfe_var_name_tail([], Accum) ->
+    transform_var_name_lstr(lists:reverse(Accum));
+transform_lfe_var_name_tail([$- | T = [_ | _]], Accum) ->
+    transform_lfe_var_name_tail(T, [$_ | Accum]);
+transform_lfe_var_name_tail([$| | T = [_ | _]], Accum) ->
+    transform_lfe_var_name_tail(T, [$_ | Accum]);
+transform_lfe_var_name_tail([H | T], Accum) ->
+    transform_lfe_var_name_tail(T, [H | Accum]).
 
 op_to_erlang_call(Line, Op, Args, Ctx) ->
     pp({call,
