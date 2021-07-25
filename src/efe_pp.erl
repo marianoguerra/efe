@@ -1809,7 +1809,17 @@ should_prefix_call(Ast, Arity, _Ctx) ->
         true ->
             {true, {atom, erlang}};
         false ->
-            false
+            case Ast of
+                {atom, _, A} ->
+                    case should_quote_atom_str(a2l(A)) of
+                        true ->
+                            {true, {var, '__MODULE__'}};
+                        false ->
+                            false
+                    end;
+                _ ->
+                    false
+            end
     end.
 
 is_ex_reserved_varname("nil") ->
