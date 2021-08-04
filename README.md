@@ -11,6 +11,28 @@ Here are some blogposts with more details:
 - http://marianoguerra.org/posts/elixir-flavoured-erlang-who-transpiles-the-transpiler/
 - http://marianoguerra.org/posts/how-to-transpile-a-complex-erlang-project-with-elixir-flavoured-erlang-erldns/
 
+## EFLFE: Elixir Flavoured Lisp Flavoured Erlang
+
+An LFE (Lisp Flavoured Erlang) to Elixir Transpiler
+
+⚠️ Work in Progress ⚠️
+
+```sh
+./efe pp-lfe file.conf my-code.lfe
+```
+
+Try some examples:
+
+```sh
+make lfe-test
+```
+
+Check:
+
+- out/samples/ping_pong.ex
+- out/samples/sample-module.ex
+- out/samples/simple-erl-exercises.ex
+
 ## Build
 
 ```sh
